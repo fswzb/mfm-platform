@@ -23,7 +23,7 @@ class database(object):
 
     foo
     """
-    def __init__(self, *, start_date = 'default', end_date = 'default', market="83"):
+    def __init__(self, *, start_date = 'default', end_date = datetime.now().date().strftime('%Y-%m-%d'), market="83"):
         # 储存交易日表
         self.trading_days = pd.Series()
         # 数据库取出来后整理成型的数据
@@ -127,7 +127,7 @@ class database(object):
     # 取行业标签
     def get_Industry(self):
         Industry = self.sq_data.pivot(index='TradingDay', columns='SecuCode', values='Industry')
-        self.data.stock_price['Industry'] = Industry
+        self.data.raw_data['Industry'] = Industry
 
     # 取是否停牌
     def get_is_suspended(self):
@@ -388,13 +388,69 @@ class database(object):
 
         self.save_data()
 
+    # 更新数据的主函数
+    def update_data_from_db(self):
+        # 首先读取ClosePrice_adj数据，将其当作更新数据时的参照标签
+        data_mark = pd.read_csv('ClosePrice_adj.csv', parse_dates=True, index_col=0)
+        # 更新的第一天为之前数据标签日期的最后一天
+        # 因为有可能当时更新数据的时候，还没有得到那次的数据
+        # 因此为了统一，更新的第一天都设置为那一天
+        last_day = data_mark.iloc[-1].index
+        self.start_date = last_day
+
+        # 更新数据
+        self.get_data_from_db(update_time=self.start_date)
+
+        # 读取以前的老数据
+        stock_price_name_list = ['ClosePrice_adj', 'OpenPrice_adj', 'Volume', 'Shares', 'FreeShares',
+                                 'MarketValue', 'FreeMarketValue']
+        raw_data_name_list = ['Industry', 'TotalAssets', 'TotalLiability', 'TotalEquity', 'PB', 'NetIncome_fy1',
+                              'NetIncome_fy2', 'EPS_fy1', 'EPS_fy2', 'CashEarnings_ttm', 'NetIncome_ttm',
+                              'PE_ttm', 'NetIncome_ttm_growth_8q', 'Revenue_ttm_growth_8q', 'EPS_ttm_growth_8q']
+        if_tradable_name_list = ['is_suspended', 'is_enlisted', 'is_delisted']
+        benchmark_index_name = ['szzz', 'sz50', 'hs300', 'zz500', 'zz800']
+        benchmark_data_type = ['ClosePrice', 'OpenPrice', 'Weight']
+        benchmark_price_name_list = [a+'_'+b for a in benchmark_data_type for b in benchmark_index_name]
+
+        old_stock_price = data.read_data(stock_price_name_list, stock_price_name_list)
+        old_raw_data = data.read_data(raw_data_name_list, raw_data_name_list)
+        old_if_tradable = data.read_data(if_tradable_name_list, if_tradable_name_list)
+        old_benchmark_price = data.read_data(benchmark_price_name_list, benchmark_price_name_list)
+
+        # 衔接新旧数据
+        new_stock_price = pd.concat([old_stock_price.drop(last_day, axis=1).sort_index(),
+                                     self.data.stock_price.sort_index()], axis=1)
+        new_raw_data = pd.concat([old_raw_data.drop(last_day, axis=1).sort_index(),
+                                     self.data.raw_data.sort_index()], axis=1)
+        new_if_tradable = pd.concat([old_if_tradable.drop(last_day, axis=1).sort_index(),
+                                     self.data.if_tradable.sort_index()], axis=1)
+        new_benchmark_price = pd.concat([old_benchmark_price.drop(last_day, axis=1).sort_index(),
+                                     self.data.benchmark_price.sort_index()], axis=1)
+
+        self.data.stock_price = new_stock_price
+        self.data.raw_data = new_raw_data
+        self.data.if_tradable = new_if_tradable
+        self.data.benchmark_price = new_benchmark_price
+
+        # 对需要的数据进行fillna，以及fillna后的重新计算
+        # 主要是那些用到first_date参数的数据，以及涉及这些数据的衍生数据
+        self.data.raw_data['TotalAssets'] = self.data.raw_data['TotalAssets'].fillna(method='ffill')
+        self.data.raw_data['TotalLiability'] = self.data.raw_data['TotalLiability'].fillna(method='ffill')
+        self.data.raw_data['TotalEquity'] = self.data.raw_data['TotalEquity'].fillna(method='ffill')
+        self.get_pb()
+        self.data.if_tradable['is_enlisted'] = self.data.if_tradable['is_enlisted'].fillna(method='ffill')
+        self.data.if_tradable['is_delisted'] = self.data.if_tradable['is_delisted'].fillna(method='ffill')
+        for index_name in benchmark_index_name:
+            self.data.benchmark_price['Weight_'+index_name] = self.data.benchmark_price['Weight_'+index_name]\
+                                                              .fillna(method='ffill')
+        self.save_data()
 
 if __name__ == '__main__':
     import time
     from multiprocessing import Process
     start_time = time.time()
     db = database(start_date='2017-01-01',end_date=datetime.now().date().strftime('%Y-%m-%d'))
-    
+    db.get_data_from_db(update_time=pd.Timestamp('2016-01-01'))
     print("time: {0} seconds\n".format(time.time()-start_time))
 
 
