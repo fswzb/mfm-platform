@@ -40,6 +40,8 @@ class database(object):
         self.start_date = start_date
         self.end_date = end_date
         self.market = market
+        # 标记本次取数据是否为更新数据
+        self.is_update = False
 
     # 初始化jydb
     def initialize_jydb(self):
@@ -62,9 +64,9 @@ class database(object):
                     self.market +" and IfTradingDay=1 "
         # 如果指定了开始结束日期，则选取开始结束日期之间的交易日
         if self.start_date != 'default':
-            sql_query = sql_query + "and TradingDate>=" + "'" + self.start_date + "' "
+            sql_query = sql_query + "and TradingDate>=" + "'" + str(self.start_date) + "' "
         if self.end_date != 'default':
-            sql_query = sql_query + "and TradingDate<=" + "'" + self.end_date + "' "
+            sql_query = sql_query + "and TradingDate<=" + "'" + str(self.end_date) + "' "
         sql_query = sql_query + 'order by trading_days'
 
         # 取数据
@@ -146,7 +148,12 @@ class database(object):
                     str(self.trading_days.iloc[-1]) + "') b on a.InnerCode=b.InnerCode "\
                     " order by SecuCode, ChangeDate"
         list_status = self.jydb_engine.get_original_data(sql_query)
-        list_status = list_status.pivot_table(index='ChangeDate',columns='SecuCode',values='ChangeType')
+        list_status = list_status.pivot_table(index='ChangeDate',columns='SecuCode',values='ChangeType',
+                                              aggfunc='first')
+        # 更新数据的时候可能出现更新时间段没有新数据的情况，要处理这种情况
+        if list_status.empty:
+            list_status = pd.DataFrame(np.nan, index=self.data.stock_price.major_axis,
+                                       columns=self.data.stock_price.minor_axis)
         # 向前填充
         list_status = list_status.fillna(method='ffill')
 
@@ -158,7 +165,11 @@ class database(object):
         # 将时间索引和标准时间索引对齐，向前填充
         is_enlisted = is_enlisted.reindex(self.data.stock_price.major_axis, method='ffill')
         # 股票上市前会变成nan，它们未上市，因此将它们填成false
-        is_enlisted = is_enlisted.fillna(0)
+        # 更新的时候，那些一列全是nan的不能填，要等衔接旧数据时填
+        if self.is_update:
+            is_enlisted = is_enlisted.apply(lambda x:x if x.isnull().all() else x.fillna(0), axis=0)
+        else:
+            is_enlisted = is_enlisted.fillna(0)
 
         # 退市标记为4， 找到那些为4的，然后将false改为nan，向前填充true，即可得到is_delisted
         # 即一旦退市之后，之后的is_delisted都为true
@@ -170,7 +181,11 @@ class database(object):
         is_delisted = is_delisted.reindex(self.data.stock_price.major_axis, method='ffill')
         # 未退市过的股票，因为没有出现过4，会出现全是nan的情况，将它们填成false
         # 股票退市前会变成nan，它们未退市，依然填成false
-        is_delisted = is_delisted.fillna(0)
+        # 更新的时候，那些一列全是nan的不能填，要等衔接旧数据时填
+        if self.is_update:
+            is_delisted = is_delisted.apply(lambda x:x if x.isnull().all() else x.fillna(0), axis=0)
+        else:
+            is_delisted = is_delisted.fillna(0)
 
         self.data.if_tradable['is_enlisted'] = is_enlisted
         self.data.if_tradable['is_delisted'] = is_delisted
@@ -193,12 +208,28 @@ class database(object):
         # 因为每个时间点上只会使用当前时间点的最新值，不是涉及变化率的计算
         recent_data = balance_sheet_data.groupby(['InfoPublDate', 'SecuCode'],as_index=False).nth(-1)
 
-        TotalAssets = recent_data.pivot_table(index='InfoPublDate', columns='SecuCode', values='TotalAssets')
-        TotalAssets = TotalAssets.fillna(method='ffill').reindex(self.data.stock_price.major_axis, method='ffill')
-        TotalLiability = recent_data.pivot_table(index='InfoPublDate', columns='SecuCode', values='TotalLiability')
-        TotalLiability = TotalLiability.fillna(method='ffill').reindex(self.data.stock_price.major_axis, method='ffill')
-        TotalEquity = recent_data.pivot_table(index='InfoPublDate', columns='SecuCode', values='TotalEquity')
-        TotalEquity = TotalEquity.fillna(method='ffill').reindex(self.data.stock_price.major_axis, method='ffill')
+        # 更新数据的时候可能出现更新时间段没有新数据的情况，要处理这种情况
+        TotalAssets = recent_data.pivot_table(index='InfoPublDate', columns='SecuCode', values='TotalAssets',
+                                              aggfunc='first')
+        if TotalAssets.empty:
+            TotalAssets = pd.DataFrame(np.nan, index=self.data.stock_price.major_axis,
+                                       columns=self.data.stock_price.minor_axis)
+        else:
+            TotalAssets = TotalAssets.fillna(method='ffill').reindex(self.data.stock_price.major_axis, method='ffill')
+        TotalLiability = recent_data.pivot_table(index='InfoPublDate', columns='SecuCode', values='TotalLiability',
+                                                 aggfunc='first')
+        if TotalLiability.empty:
+            TotalLiability = pd.DataFrame(np.nan, index=self.data.stock_price.major_axis,
+                                       columns=self.data.stock_price.minor_axis)
+        else:
+            TotalLiability = TotalLiability.fillna(method='ffill').reindex(self.data.stock_price.major_axis, method='ffill')
+        TotalEquity = recent_data.pivot_table(index='InfoPublDate', columns='SecuCode', values='TotalEquity',
+                                              aggfunc='first')
+        if TotalEquity.empty:
+            TotalEquity = pd.DataFrame(np.nan, index=self.data.stock_price.major_axis,
+                                       columns=self.data.stock_price.minor_axis)
+        else:
+            TotalEquity = TotalEquity.fillna(method='ffill').reindex(self.data.stock_price.major_axis, method='ffill')
 
         self.data.raw_data['TotalAssets'] = TotalAssets
         self.data.raw_data['TotalLiability'] = TotalLiability
@@ -249,7 +280,8 @@ class database(object):
 
     # 取cash earnings ttm
     def get_cash_earings_ttm(self):
-        sql_query = "select b.DataDate, a.SecuCode, b.cash_earnings_ttm from " \
+        sql_query = "set query_governor_cost_limit 0"\
+                    "select b.DataDate, a.SecuCode, b.cash_earnings_ttm from " \
                     "(select distinct InnerCode, SecuCode from ReturnDaily) a left join " \
                     "(select DataDate, CashEquivalentIncrease as cash_earnings_ttm, InnerCode from " \
                     "TTM_LC_CashFlowStatementAll where DataDate>='" + str(self.trading_days.iloc[0]) + \
@@ -263,7 +295,8 @@ class database(object):
 
     # 取net income ttm
     def get_ni_ttm(self):
-        sql_query = "select b.DataDate, a.SecuCode, b.ni_ttm from " \
+        sql_query = "set query_governor_cost_limit 0"\
+                    "select b.DataDate, a.SecuCode, b.ni_ttm from " \
                     "(select distinct InnerCode, SecuCode from ReturnDaily) a left join " \
                     "(select DataDate, NetProfit as ni_ttm, InnerCode from TTM_LC_IncomeStatementAll " \
                     "where DataDate>='" + str(self.trading_days.iloc[0]) + "' and DataDate<='" + \
@@ -282,7 +315,8 @@ class database(object):
 
     # 取ni ttm, revenue ttm, eps_ttm的两年增长率
     def get_ni_revenue_eps_growth(self):
-        sql_query = "select b.DataDate, a.SecuCode, b.EndDate, b.ni_ttm, b.revenue_ttm, b.eps_ttm from " \
+        sql_query = "set query_governor_cost_limit 0"\
+                    "select b.DataDate, a.SecuCode, b.EndDate, b.ni_ttm, b.revenue_ttm, b.eps_ttm from " \
                     "(select distinct InnerCode, SecuCode from ReturnDaily) a " \
                     "left join (select DataDate, InnerCode, EndDate, NetProfit as ni_ttm, " \
                     "TotalOperatingRevenue as revenue_ttm, BasicEPS as eps_ttm from TTM_LC_IncomeStatementAll_8Q " \
@@ -342,15 +376,28 @@ class database(object):
                     "on b.InnerCode=c.InnerCode "\
                     "order by EndDate, index_code, comp_code "
         weight_data = self.jydb_engine.get_original_data(sql_query)
-        index_weight = weight_data.pivot_table(index='EndDate', columns=['index_code', 'comp_code'], values='Weight')
-        index_weight = index_weight.reindex(self.data.stock_price.major_axis,
-                                                                   method='ffill')
+        index_weight = weight_data.pivot_table(index='EndDate', columns=['index_code', 'comp_code'],
+                                               values='Weight', aggfunc='first')
         index_name = {'000001': 'szzz', '000016': 'sz50', '000300': 'hs300', '000905': 'zz500', '000906': 'zz800'}
+        # 更新数据的时候可能出现更新时间段没有新数据的情况，要处理这种情况
+        if index_weight.empty:
+            index_weight = pd.DataFrame(np.nan, index=self.data.stock_price.major_axis,columns=
+                                        pd.MultiIndex.from_product([list(index_name.keys()), self.data.stock_price.minor_axis]))
+        else:
+            index_weight = index_weight.reindex(self.data.stock_price.major_axis,
+                                                                   method='ffill')
+
         # 对指数进行循环储存
         for i in index_weight.columns.get_level_values(0).drop_duplicates():
             self.data.benchmark_price['Weight_'+index_name[i]] = index_weight.ix[:, i]
             # 将权重数据的nan填上0
-            self.data.benchmark_price['Weight_'+index_name[i]] = self.data.benchmark_price['Weight_'+index_name[i]].fillna(0)
+            # 如果为更新数据，则一行全是nan的情况不填，一行有数据的情况才将nan填成0
+            if self.is_update:
+                self.data.benchmark_price['Weight_'+index_name[i]] = self.data.benchmark_price['Weight_'+index_name[i]].\
+                    apply(lambda x:x if x.isnull().all() else x.fillna(0), axis=1)
+            else:
+                self.data.benchmark_price['Weight_'+index_name[i]] = \
+                    self.data.benchmark_price['Weight_'+index_name[i]].fillna(0)
 
     # 储存数据文件
     def save_data(self):
@@ -386,17 +433,25 @@ class database(object):
         self.get_index_price()
         self.get_index_weight(first_date=update_time)
 
-        self.save_data()
+        # 更新数据的情况先不能储存数据，只有非更新的情况才能储存
+        if not self.is_update:
+            self.save_data()
 
     # 更新数据的主函数
-    def update_data_from_db(self):
+    def update_data_from_db(self, *, end_date='default'):
+        # 更新标记
+        self.is_update = True
         # 首先读取ClosePrice_adj数据，将其当作更新数据时的参照标签
         data_mark = pd.read_csv('ClosePrice_adj.csv', parse_dates=True, index_col=0)
         # 更新的第一天为之前数据标签日期的最后一天
         # 因为有可能当时更新数据的时候，还没有得到那次的数据
         # 因此为了统一，更新的第一天都设置为那一天
-        last_day = data_mark.iloc[-1].index
+        last_day = data_mark.iloc[-1].name
         self.start_date = last_day
+
+        # 可以设置更新数据的更新截止日，默认为更新到当天
+        if end_date != 'default':
+            self.end_date = end_date
 
         # 更新数据
         self.get_data_from_db(update_time=self.start_date)
@@ -445,12 +500,16 @@ class database(object):
                                                               .fillna(method='ffill')
         self.save_data()
 
+        # 重置标记
+        self.is_update = False
+
 if __name__ == '__main__':
     import time
     from multiprocessing import Process
     start_time = time.time()
-    db = database(start_date='2017-01-01',end_date=datetime.now().date().strftime('%Y-%m-%d'))
-    db.get_data_from_db(update_time=pd.Timestamp('2016-01-01'))
+    db = database(start_date='2017-03-22')
+#    db.get_data_from_db(update_time=pd.Timestamp('2016-01-01'))
+    db.update_data_from_db()
     print("time: {0} seconds\n".format(time.time()-start_time))
 
 
