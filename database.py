@@ -85,6 +85,7 @@ class database(object):
         self.data.raw_data = pd.Panel(major_axis=index_label, minor_axis=column_label)
         self.data.benchmark_price = pd.Panel(major_axis=index_label, minor_axis=column_label)
         self.data.if_tradable = pd.Panel(major_axis=index_label, minor_axis=column_label)
+        self.data.const_data = pd.DataFrame(index=index_label)
 
     # 取ClosePrice_adj数据，将data中的panel数据index和columns都设置为ClosePrice_adj的index和columns
     # 先将所有的数据都取出来，之后不用再次从sq中取
@@ -405,6 +406,7 @@ class database(object):
         data.write_data(self.data.raw_data)
         data.write_data(self.data.benchmark_price)
         data.write_data(self.data.if_tradable)
+        self.data.const_data.to_csv('const_data.csv', index_label='datetime', na_rep='NaN')
 
     # 取数据的主函数
     # update_time为default时，则为首次取数据，需要更新数据时，传入更新的第一个交易日的时间给update_time即可

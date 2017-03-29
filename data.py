@@ -25,17 +25,21 @@ class data(object):
                          which is used for factor calculation, note the difference between stock_price
                          data and raw_data
     benchmark_price (pd.Panel): price data of benchmarks
+    if_tradable (pd.Panel): marks which indicate if stocks are enlisted, delisted, suspended, tradable, in stock pool
+                            or investable.
+    const_data (pd.DataFrame): const data, usually macroeconomic data, such as risk free rate or inflation rate.
     """
     
     def __init__(self):
         self.stock_price = pd.Panel()
         self.raw_data = pd.Panel()
         self.benchmark_price = pd.Panel()
-        self.if_tradable = pd.Panel()        
+        self.if_tradable = pd.Panel()
+        self.const_data = pd.DataFrame()
 
     # 读取数据的函数
     @staticmethod
-    def read_data(file_name, item_name, *, shift = False):
+    def read_data(file_name, item_name='default', *, shift = False):
         """ Get the data from csv file.
         
         file_name: name of the file.
@@ -49,11 +53,14 @@ class data(object):
         # 从文件中读取数据
         obj = {}
         for i, s in enumerate(file_name):
-             temp_df = pd.read_csv(str(os.path.abspath('.'))+'/'+s+'.csv',
+            temp_df = pd.read_csv(str(os.path.abspath('.'))+'/'+s+'.csv',
                                    index_col = 0, parse_dates = True, thousands=',')
-             if shift:
-                 temp_df = temp_df.shift(1)
-             obj[item_name[i]] = temp_df
+            if shift:
+                temp_df = temp_df.shift(1)
+            if file_name=='default':
+                obj[file_name[i]] = temp_df
+            else:
+                obj[item_name[i]] = temp_df
         obj = pd.Panel.from_dict(obj)
         return obj
 

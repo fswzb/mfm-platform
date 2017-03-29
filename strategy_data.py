@@ -38,29 +38,32 @@ class strategy_data(data):
         self.factor_expo = pd.Panel()
         # 股票池，即策略选取的股票池，或各因子数据计算时用到的股票池
         # 目前对股票池的处理方法是将其归为不可交易，用discard_untradable_data来将股票池外的数据设为nan
-        self.stock_pool = pd.DataFrame()
+        self.stock_pool = 'all'
 
-    # 目前对股票池的处理方法是将股票池外的股票设置为不可交易
+    # 新建一个dataframe储存股票是否在股票池内，再建一个dataframe和if_tradable取交集
     def handle_stock_pool(self, *, stock_pool='all', shift=False):
+        self.stock_pool = stock_pool
         # 如果未设置股票池
-        if stock_pool == 'all':
-            return
+        if self.stock_pool == 'all':
+            self.if_tradable['if_inpool'] = True
         # 设置了股票池，若已存在benchmark中的weight，则直接使用
-        elif 'weights' in self.benchmark_price.items:
-            self.stock_pool = self.benchmark_price.ix['weights']>0
+        elif 'Weight_'+stock_pool in self.benchmark_price.items:
+            self.if_tradable['if_inpool'] = self.benchmark_price.ix['Weight_'+stock_pool]>0
         # 若不在，则读取weight数据，文件名即为stock_pool
         else:
-            temp_weights = data.read_data([stock_pool+'.csv'],['weights'])
-            self.stock_pool = temp_weights.ix['weights']>0
+            temp_weights = data.read_data(['Weight_'+stock_pool],['Weight_'+stock_pool])
+            self.benchmark_price['Weight_'+stock_pool] = temp_weights['Weight_'+stock_pool]
+            self.if_tradable['if_inpool'] = self.benchmark_price.ix['Weight_'+stock_pool]>0
 
         if shift:
-            self.stock_pool = self.stock_pool.shift(1).fillna(False)
+            self.if_tradable['if_inpool'] = self.if_tradable['if_inpool'].shift(1)
 
         # 若还没有if_tradable，报错
         assert 'if_tradable' in self.if_tradable.items, 'Please generate if_tradable first!'
-        # 若不在股票池中，则股票在if_tradable中为false，即不可交易，在股票池中的股票还同时可以交易才是true
-        self.if_tradable.ix['if_tradable'] = np.logical_and(self.if_tradable.ix['if_tradable'], self.stock_pool)
 
+        # 新建一个if_inv，表明在股票池中，且可以交易
+        # 在if_tradable中为true，且在if_inpool中为true，才可投资，即在if_inv中为true
+        self.if_tradable.ix['if_inv'] = np.logical_and(self.if_tradable.ix['if_tradable'], self.if_tradable.ix['if_inpool'])
 
     # 对数据进行winsorization
     @staticmethod
@@ -166,32 +169,69 @@ class strategy_data(data):
         # 股票价格行情数据
         if not self.stock_price.empty:
             for item, df in self.stock_price.iteritems():
-                self.stock_price.ix[item] = self.stock_price.ix[item].where( \
+                self.stock_price.ix[item] = self.stock_price.ix[item].where(
                                              self.if_tradable.ix['if_tradable'], np.nan)
         
         # benchmark数据
         if not self.benchmark_price.empty:
             for item, df in self.benchmark_price.iteritems():
-                self.benchmark_price.ix[item] = self.benchmark_price.ix[item].where( \
+                self.benchmark_price.ix[item] = self.benchmark_price.ix[item].where(
                                                  self.if_tradable.ix['if_tradable'], np.nan)
         
         # 原始数据                                          
         if not self.raw_data.empty:
             for item, df in self.raw_data.iteritems():
-                self.raw_data.ix[item] = self.raw_data.ix[item].where( \
+                self.raw_data.ix[item] = self.raw_data.ix[item].where(
                                           self.if_tradable.ix['if_tradable'], np.nan)
                                                
         # 因子数据
         if not self.factor.empty:
             for item, df in self.factor.iteritems():
-                self.factor.ix[item] = self.factor.ix[item].where( \
+                self.factor.ix[item] = self.factor.ix[item].where(
                                         self.if_tradable.ix['if_tradable'], np.nan)
         
         # 因子暴露数据        
         if not self.factor_expo.empty:
             for item, df in self.factor_expo.iteritems():
-                self.factor_expo.ix[item] = self.factor_expo.ix[item].where( \
+                self.factor_expo.ix[item] = self.factor_expo.ix[item].where(
                                              self.if_tradable.ix['if_tradable'], np.nan)
+
+    # 与discard_untradable_data一样，只是这里丢弃掉不可投资的数据
+    def discard_uninv_data(self):
+        # 如果没有可交易标记的数据，则什么数据也不丢弃
+        if self.if_tradable.ix['if_inv'].empty:
+            return
+
+        # 股票价格行情数据
+        if not self.stock_price.empty:
+            for item, df in self.stock_price.iteritems():
+                self.stock_price.ix[item] = self.stock_price.ix[item].where(
+                    self.if_tradable.ix['if_inv'], np.nan)
+
+        # benchmark数据
+        if not self.benchmark_price.empty:
+            for item, df in self.benchmark_price.iteritems():
+                self.benchmark_price.ix[item] = self.benchmark_price.ix[item].where(
+                    self.if_tradable.ix['if_inv'], np.nan)
+
+        # 原始数据
+        if not self.raw_data.empty:
+            for item, df in self.raw_data.iteritems():
+                self.raw_data.ix[item] = self.raw_data.ix[item].where(
+                    self.if_tradable.ix['if_inv'], np.nan)
+
+        # 因子数据
+        if not self.factor.empty:
+            for item, df in self.factor.iteritems():
+                self.factor.ix[item] = self.factor.ix[item].where(
+                    self.if_tradable.ix['if_inv'], np.nan)
+
+        # 因子暴露数据
+        if not self.factor_expo.empty:
+            for item, df in self.factor_expo.iteritems():
+                self.factor_expo.ix[item] = self.factor_expo.ix[item].where(
+                    self.if_tradable.ix['if_inv'], np.nan)
+
         
     # 对数据进行回归取残差提纯，即gram-schmidt正交化
     @staticmethod
