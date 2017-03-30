@@ -54,7 +54,7 @@ class data(object):
         obj = {}
         for i, s in enumerate(file_name):
             temp_df = pd.read_csv(str(os.path.abspath('.'))+'/'+s+'.csv',
-                                   index_col = 0, parse_dates = True, thousands=',')
+                                   index_col = 0, parse_dates = True, encoding='GB18030')
             if shift:
                 temp_df = temp_df.shift(1)
             if file_name=='default':
@@ -75,10 +75,12 @@ class data(object):
         """
         if file_name == 'default':
             for cursor, item_name in enumerate(written_data.items):
-                written_data.ix[cursor].to_csv(str(item_name)+'.csv', index_label='datetime', na_rep='NaN')
+                written_data.ix[cursor].to_csv(str(item_name)+'.csv', index_label='datetime', na_rep='NaN',
+                                               encoding='GB18030')
         else:
             for cursor, item_name in enumerate(written_data.items):
-                written_data.ix[cursor].to_csv(file_name[cursor]+'.csv', index_label='datetime', na_rep='NaN')
+                written_data.ix[cursor].to_csv(file_name[cursor]+'.csv', index_label='datetime', na_rep='NaN',
+                                               encoding='GB18030')
         
     # 重新对齐索引的函数
     @staticmethod
@@ -104,9 +106,10 @@ class data(object):
         # 读取上市、退市、停牌数据
         self.if_tradable = data.read_data(file_name, item_name, shift = shift)
         # 将已上市且未退市，未停牌的股票标记为可交易(if_tradable = True)
+        # 注意没有停牌数据的股票默认为不停牌
         self.if_tradable['if_tradable'] = (self.if_tradable.ix['is_enlisted', :, :] * \
                                            np.logical_not(self.if_tradable.ix['is_delisted', :, :]) * \
-                                           np.logical_not(self.if_tradable.ix['is_suspended', :, :])).fillna(False).astype(np.bool)
+                                           np.logical_not(self.if_tradable.ix['is_suspended', :, :].fillna(0))).astype(np.bool)
             
         
         
