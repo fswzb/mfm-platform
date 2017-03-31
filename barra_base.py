@@ -31,7 +31,7 @@ class barra_base(object):
         self.bb_data = strategy_data()
         self.bb_factor_return = pd.DataFrame()
         # 提示barra base的股票池
-        self.stock_pool = stock_pool
+        self.bb_data.stock_pool = stock_pool
         # 提示是否为数据更新
         self.is_update = False
         
@@ -106,14 +106,14 @@ class barra_base(object):
         if 'PE_ttm' not in self.bb_data.raw_data.items:
             pe_ttm = data.read_data(['PE_ttm'], ['PE_ttm'])
             self.bb_data.raw_data['PE_ttm'] = pe_ttm.ix['PE_ttm']
-        # 读取净利润net income ttm，暂时用历史净利润来代替历史eps
+        # 读取净利润net income ttm
         if 'NetIncome_ttm' not in self.bb_data.raw_data.items:
             ni_ttm = data.read_data(['NetIncome_ttm'], ['NetIncome_ttm'])
             self.bb_data.raw_data['NetIncome_ttm'] = ni_ttm.ix['NetIncome_ttm']
-        # 读取eps ttm的2年增长率
-        if 'EPS_ttm_growth_8q' not in self.bb_data.raw_data.items:
-            eps_ttm_growth_8q = data.read_data(['EPS_ttm_growth_8q'], ['EPS_ttm_growth_8q'])
-            self.bb_data.raw_data['EPS_ttm_growth_8q'] = eps_ttm_growth_8q.ix['EPS_ttm_growth_8q']
+        # 读取ni ttm的2年增长率，用ni增长率代替eps增长率，因为ni增长率的数据更全
+        if 'NetIncome_ttm_growth_8q' not in self.bb_data.raw_data.items:
+            ni_ttm_growth_8q = data.read_data(['NetIncome_ttm_growth_8q'], ['NetIncome_ttm_growth_8q'])
+            self.bb_data.raw_data['NetIncome_ttm_growth_8q'] = ni_ttm_growth_8q.ix['NetIncome_ttm_growth_8q']
         # 读取revenue ttm的2年增长率
         if 'Revenue_ttm_growth_8q' not in self.bb_data.raw_data.items:
             Revenue_ttm_growth_8q = data.read_data(['Revenue_ttm_growth_8q'], ['Revenue_ttm_growth_8q'])
@@ -127,7 +127,7 @@ class barra_base(object):
             self.bb_data.raw_data['Totalliability'] = Totalliability.ix['Totalliability']
         # 生成可交易及可投资数据
         self.bb_data.generate_if_tradable()
-        self.bb_data.handle_stock_pool(stock_pool=self.stock_pool)
+        self.bb_data.handle_stock_pool()
         # 读取完所有数据后，过滤数据
         # 注意：在之后的因子计算中，中间计算出的因子之间相互依赖的，都要再次过滤，如一个需要从另一个中算出
         # 或者回归，正交化，而且凡是由多个因子加权得到的因子，都属于这一类
@@ -588,8 +588,8 @@ class barra_base(object):
             egro = data.read_data(['egro'], ['egro'])
             egro = egro.ix['egro']
         else:
-            # 用eps ttm的两年增长率代替eps ttm的5年增长率
-            egro = self.bb_data.raw_data.ix['EPS_ttm_growth_8q']
+            # 用ni ttm的两年增长率代替ni ttm的5年增长率
+            egro = self.bb_data.raw_data.ix['NetIncome_ttm_growth_8q']
         self.bb_data.raw_data['egro'] = egro
 
     # 计算growth中的sgro
@@ -707,8 +707,17 @@ class barra_base(object):
         self.bb_data.discard_uninv_data()
 
         # 如果不是更新数据且股票池为所有股票，则储存因子值数据
-        if not self.is_update and self.stock_pool == 'all':
+        # 还需要求为非外部调用的情况
+        if not self.is_update and self.bb_data.stock_pool == 'all' and __name__=='__main__':
             data.write_data(self.bb_data.factor)
+
+    # 仅计算barra base的因子暴露，主要用于对与不同股票池，可以在不重新建立新对象的情况下，算不同的因子暴露
+    def just_get_factor_expo(self):
+        self.bb_data.discard_uninv_data()
+        self.get_style_factor_exposure()
+        self.get_industry_factor()
+        self.add_country_factor()
+        self.bb_data.discard_uninv_data()
 
     # 回归计算各个基本因子的因子收益
     def get_bb_factor_return(self):
@@ -733,7 +742,7 @@ class barra_base(object):
     def update_barra_base_factor_data(self):
         self.is_update = True
         # 检验stock pool是否为all
-        assert self.stock_pool == 'all', print('Please make sure stock pool is all when updating factor data.\n')
+        assert self.bb_data.stock_pool == 'all', print('Please make sure stock pool is all when updating factor data.\n')
         # 首先读取原始数据
         self.read_original_data()
         # 读取旧的因子数据

@@ -172,7 +172,7 @@ class database(object):
         if self.is_update:
             is_enlisted = is_enlisted.apply(lambda x:x if x.isnull().all() else x.fillna(0), axis=0)
         else:
-            is_enlisted = is_enlisted.fillna(0)
+            is_enlisted = is_enlisted.fillna(0).astype(np.int)
 
         # 退市标记为4， 找到那些为4的，然后将false改为nan，向前填充true，即可得到is_delisted
         # 即一旦退市之后，之后的is_delisted都为true
@@ -190,10 +190,10 @@ class database(object):
         if self.is_update:
             is_delisted = is_delisted.apply(lambda x:x if x.isnull().all() else x.fillna(0), axis=0)
         else:
-            is_delisted = is_delisted.fillna(0)
+            is_delisted = is_delisted.fillna(0).astype(np.int)
 
-        self.data.if_tradable['is_enlisted'] = is_enlisted.astype(np.int)
-        self.data.if_tradable['is_delisted'] = is_delisted.astype(np.int)
+        self.data.if_tradable['is_enlisted'] = is_enlisted
+        self.data.if_tradable['is_delisted'] = is_delisted
 
     # 取总资产，总负债和所有者权益
     # 取合并报表，即if_merged = 1
@@ -331,7 +331,7 @@ class database(object):
         ttm_data_8q = self.sq_engine.get_original_data(sql_query)
         # 两年增长率，直接用每个时间点上的当前quarter的ttm数据除以8q以前的ttm数据减一
         grouped_data = ttm_data_8q.groupby(['DataDate', 'SecuCode'])
-        growth_data = grouped_data['ni_ttm','revenue_ttm','eps_ttm'].apply(lambda x:x.iloc[-1]/x.iloc[0]-1)
+        growth_data = grouped_data['ni_ttm','revenue_ttm','eps_ttm'].apply(lambda x:(x.iloc[-1]/x.iloc[0])**(1/2)-1)
         time_index = growth_data.index.get_level_values(0)
         stock_index = growth_data.index.get_level_values(1)
 
@@ -508,8 +508,8 @@ class database(object):
         self.data.raw_data['TotalLiability'] = self.data.raw_data['TotalLiability'].fillna(method='ffill')
         self.data.raw_data['TotalEquity'] = self.data.raw_data['TotalEquity'].fillna(method='ffill')
         self.get_pb()
-        self.data.if_tradable['is_enlisted'] = self.data.if_tradable['is_enlisted'].fillna(method='ffill')
-        self.data.if_tradable['is_delisted'] = self.data.if_tradable['is_delisted'].fillna(method='ffill')
+        self.data.if_tradable['is_enlisted'] = self.data.if_tradable['is_enlisted'].fillna(method='ffill').astype(np.int)
+        self.data.if_tradable['is_delisted'] = self.data.if_tradable['is_delisted'].fillna(method='ffill').astype(np.int)
         for index_name in benchmark_index_name:
             self.data.benchmark_price['Weight_'+index_name] = self.data.benchmark_price['Weight_'+index_name]\
                                                               .fillna(method='ffill')
@@ -521,9 +521,9 @@ class database(object):
 if __name__ == '__main__':
     import time
     start_time = time.time()
-    db = database(start_date='2007-01-01', end_date='2012-01-01')
+    db = database(start_date='2007-01-01')
 #    db.get_data_from_db()
-    db.update_data_from_db(end_date='2013-01-01')
+    db.update_data_from_db()
     print("time: {0} seconds\n".format(time.time()-start_time))
 
 

@@ -17,6 +17,7 @@ from data import data
 from backtest_data import backtest_data
 from position import position
 from performance import performance
+from performance_attribution import performance_attribution
 
 # 回测类，对给定的持仓进行回测
 
@@ -39,17 +40,17 @@ class backtest(object):
         # 初始化回测用到的股价数据类
         self.bkt_data = backtest_data()
         # 初始化股价数据，包括收盘开盘价等
-        if bkt_stock_data is 'default':
+        if bkt_stock_data == 'default':
             self.bkt_data.stock_price = data.read_data(['ClosePrice_adj','OpenPrice_adj'], 
                                                   ['ClosePrice_adj','OpenPrice_adj'])
         else:
             self.bkt_data.stock_price = data.read_data(bkt_stock_data)
         # 初始化基准价格数据，默认设为中证500，只需要收盘数据
-        if bkt_benchmark_data is 'default':
+        if bkt_benchmark_data == 'default':
             self.bkt_data.benchmark_price = data.read_data(['ClosePrice_zz500','OpenPrice_zz500'], 
                                                       ['ClosePrice','OpenPrice'])
         else:
-            self.bkt_data.benchmark_price = data.read_data(bkt_benchmark_data)
+            self.bkt_data.benchmark_price = data.read_data([bkt_benchmark_data], [bkt_benchmark_data])
         # 读取股票上市退市停牌数据，并生成标记股票是否可交易的矩阵
         self.bkt_data.generate_if_tradable()
             
@@ -61,45 +62,45 @@ class backtest(object):
         
         # 检测股票代码是否都包含在回测数据中，当有一只股票的某一个回测数据全是nan时，则认为有股票代码没有全部包含在回测数据中
         assert not self.bkt_data.stock_price.isnull().all(1).any().any(), \
-               'Some stocks in the input holding matrix are NOT included in the backtest database,\
-               please check it carefully!\n'
+               'Some stocks in the input holding matrix are NOT included in the backtest database, '\
+               'please check it carefully!\n'
         # 检测回测数据是否覆盖了回测时间段
         # 检测起始时间
-        if bkt_start is 'default':
+        if bkt_start == 'default':
             assert self.bkt_data.stock_price.major_axis[0]<=self.bkt_position.holding_matrix.index[0], \
-                   'The default start time of backtest is earlier than the start time in backtest database,\
-                   please try to set a later start time which must be a trading day\n'
+                   'The default start time of backtest is earlier than the start time in backtest database, '\
+                   'please try to set a later start time which must be a trading day\n'
         else:
             assert self.bkt_data.stock_price.major_axis[0]<=bkt_start, \
-                   'The input start time of backtest is earlier than the start time in backteset database,\
-                   please try to set a later start time which must be a trading day, or try to set it as default\n'
+                   'The input start time of backtest is earlier than the start time in backteset database, '\
+                   'please try to set a later start time which must be a trading day, or try to set it as default\n'
         # 检测结束时间
-        if bkt_end is 'default':
+        if bkt_end == 'default':
             # 如果回测数据中的最后一天直接在最后一个调仓日前，则直接报错
             assert self.bkt_data.stock_price.major_axis[-1]>self.bkt_position.holding_matrix.index[-1], \
-                   'The default end time of backtest is later than the end time in backtest database,\
-                   please try to set an earlier end time which must be a trading day\n'
+                   'The default end time of backtest is later than the end time in backtest database, '\
+                   'please try to set an earlier end time which must be a trading day\n'
             # 回测数据中的最后一天在最后一个调仓日后，现在判断是否之后有60个交易日可取
             last_holding_loc = self.bkt_data.stock_price.major_axis.get_loc(self.bkt_position.holding_matrix.index[-1])
             total_size = self.bkt_data.stock_price.major_axis.size
             assert total_size>=last_holding_loc+1+60, \
-                   'The default end time of backtest is later than the end time in backtest database,\
-                   please try to set an earlier end time which must be a trading day\n'
+                   'The default end time of backtest is later than the end time in backtest database, '\
+                   'please try to set an earlier end time which must be a trading day\n'
         else:
             assert self.bkt_data.stock_price.major_axis[-1]>bkt_end, \
-                   'The input end time of backtest is later than the end time in backtest database,\
-                   please try to set an earlier end time which must be a trading day, or try to set it as default\n'
+                   'The input end time of backtest is later than the end time in backtest database, '\
+                   'please try to set an earlier end time which must be a trading day, or try to set it as default\n'
         
         # 设置回测的起止时间，这里要注意默认的时间可能超过回测数据的范围
         # 起始时间：默认为第一个调仓日，如有输入数据，则为输入数据和默认时间的较晚日期
         default_start = self.bkt_data.stock_price.major_axis[self.bkt_data.stock_price.major_axis.get_loc(self.bkt_position.holding_matrix.index[0])]
-        if bkt_start is 'default':
+        if bkt_start == 'default':
             self.bkt_start = default_start
         else:
             self.bkt_start = max(default_start, bkt_start)
-        # 停止时间：默认为最后一个调仓日后的60个交易日，如有输入数据，则以输入数据为准       
-        if bkt_end is 'default':
-            default_end = self.bkt_data.stock_price.major_axis[self.bkt_data.stock_price.major_axis.get_loc(self.bkt_position.holding_matrix.index[-1])+60]
+        # 停止时间：默认为最后一个调仓日后的21个交易日，如有输入数据，则以输入数据为准
+        if bkt_end == 'default':
+            default_end = self.bkt_data.stock_price.major_axis[self.bkt_data.stock_price.major_axis.get_loc(self.bkt_position.holding_matrix.index[-1])+21]
             self.bkt_end = default_end
         else:
             self.bkt_end = bkt_end
@@ -145,9 +146,12 @@ class backtest(object):
         self.benchmark_value = self.bkt_data.benchmark_price.ix['ClosePrice', :, 0]
         
         # 暂时用一个警告的string初始化performance对象，防止提前调用此对象出错
-        self.bkt_performance = 'The performance attribute of this backtest object has NOT been initialized,\
-                            please try to call this attribute after call backtest.get_performance()'
-        
+        self.bkt_performance = 'The performance object of this backtest object has NOT been initialized, '\
+                               'please try to call this attribute after call backtest.get_performance()\n'
+
+        # 显示回测是否重置的标签，多次用到同一个回测对象时，用其控制回测数据的重置
+        self.is_bkt_reset = True
+
         # 初始化结束时，目标和实际持仓矩阵、回测数据都是一样的时间股票索引（即策略持仓股票为股票索引，回测期间为时间索引），
         # 传入的bkt_position股票索引是一样的，但是时间索引为调仓日的时间
         print('The backtest system has been successfully initialized!\n')
@@ -157,6 +161,7 @@ class backtest(object):
         
         foo
         """
+        self.is_bkt_reset = False
         cursor = -1
         # 开始执行循环，对tar_pct_position.holding_matrix进行循环
         for curr_time, curr_tar_pct_holding in self.tar_pct_position.holding_matrix.iterrows():
@@ -326,6 +331,27 @@ class backtest(object):
         # 画图
         self.bkt_performance.plot_performance()
 
+    # 利用回测得到的数据进行业绩归因
+    def get_performance_attribution(self, *, benchmark_position='default', outside_bb='Empty', discard_factor=[],
+                                    show_warning=True):
+        self.bkt_pa = performance_attribution(self.real_pct_position, benchmark_position=benchmark_position,
+                                              portfolio_returns=self.bkt_performance.cum_log_return)
+        self.bkt_pa.execute_performance_attribution(outside_bb=outside_bb, discard_factor=discard_factor,
+                                                    show_warning=show_warning)
+        self.bkt_pa.plot_performance_attribution()
+
+    # 重置回测每次执行回测要改变的数据，若想不创建新回测对象而改变回测参数，则需重置这些数据后才能再次执行回测
+    def reset_bkt_data(self):
+        if not self.is_bkt_reset:
+            # 重置现金序列，账户序列以及benchmark序列
+            self.cash = pd.Series(np.zeros(self.real_vol_position.holding_matrix.shape[0]),
+                                  index=self.real_vol_position.holding_matrix.index)
+            self.cash.ix[0] = self.initial_money * self.trade_ratio
+            self.account_value = []
+            self.benchmark_value = self.bkt_data.benchmark_price.ix['ClosePrice', :, 0]
+
+            self.is_bkt_reset = True
+
     # 重置传入的持仓矩阵参数的函数，当要测试同一个策略的不同参数对其的影响时，会用到，这样可以不必重新创建一个回测对象
     # 注意这里只改变了传入的持仓矩阵，包括回测时间，股票id，benchmark等其余参数一律不变
     def reset_bkt_position(self, new_bkt_position):
@@ -337,13 +363,23 @@ class backtest(object):
         self.real_vol_position = position(self.tar_pct_position.holding_matrix)
         self.real_pct_position = position(self.tar_pct_position.holding_matrix)
         self.tar_vol_position = position(self.tar_pct_position.holding_matrix)
-        
-        # 重置现金序列，账户序列以及benchmark序列
-        self.cash = pd.Series(np.zeros(self.real_vol_position.holding_matrix.shape[0]), 
-                                 index = self.real_vol_position.holding_matrix.index)
-        self.cash.ix[0] = self.initial_money*self.trade_ratio
-        self.account_value = []              
-        self.benchmark_value = self.bkt_data.benchmark_price.ix['ClosePrice', :, 0]        
+
+        # 重置回测数据
+        self.reset_bkt_data()
+
+    # 重置benchmark，需要观察一个策略相对不同benchmark的变化时用到，包括改变股票池后，benchmark应当换成对应的股票池
+    def reset_bkt_benchmark(self, new_bkt_benchmark_data):
+        self.bkt_data.benchmark_price = data.read_data([new_bkt_benchmark_data], [new_bkt_benchmark_data])
+
+        # 将benchmark price数据期调整为回测期
+        self.bkt_data.benchmark_price = data.align_index(self.tar_pct_position.holding_matrix,
+                                                         self.bkt_data.benchmark_price, axis='major')
+
+        # 重置回测数据
+        self.reset_bkt_data()
+
+
+
                 
                 
                 

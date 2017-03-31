@@ -41,19 +41,18 @@ class strategy_data(data):
         self.stock_pool = 'all'
 
     # 新建一个dataframe储存股票是否在股票池内，再建一个dataframe和if_tradable取交集
-    def handle_stock_pool(self, *, stock_pool='all', shift=False):
-        self.stock_pool = stock_pool
+    def handle_stock_pool(self, *, shift=False):
         # 如果未设置股票池
         if self.stock_pool == 'all':
             self.if_tradable['if_inpool'] = True
         # 设置了股票池，若已存在benchmark中的weight，则直接使用
-        elif 'Weight_'+stock_pool in self.benchmark_price.items:
-            self.if_tradable['if_inpool'] = self.benchmark_price.ix['Weight_'+stock_pool]>0
+        elif 'Weight_'+self.stock_pool in self.benchmark_price.items:
+            self.if_tradable['if_inpool'] = self.benchmark_price.ix['Weight_'+self.stock_pool]>0
         # 若不在，则读取weight数据，文件名即为stock_pool
         else:
-            temp_weights = data.read_data(['Weight_'+stock_pool],['Weight_'+stock_pool])
-            self.benchmark_price['Weight_'+stock_pool] = temp_weights['Weight_'+stock_pool]
-            self.if_tradable['if_inpool'] = self.benchmark_price.ix['Weight_'+stock_pool]>0
+            temp_weights = data.read_data(['Weight_'+self.stock_pool],['Weight_'+self.stock_pool])
+            self.benchmark_price['Weight_'+self.stock_pool] = temp_weights['Weight_'+self.stock_pool]
+            self.if_tradable['if_inpool'] = self.benchmark_price.ix['Weight_'+self.stock_pool]>0
 
         if shift:
             self.if_tradable['if_inpool'] = self.if_tradable['if_inpool'].shift(1)
@@ -264,7 +263,7 @@ class strategy_data(data):
     # 用二次规划问题求解此线性回归问题
     # 目前，基于barra的业绩归因、barra基础因子内部回归都可以用这个线性回归模型，暂不支持新增因子
     @staticmethod
-    def constrained_gls_barra_base(asset_return, bb, *, weights='default',  indus_ret_weights = 'default'):
+    def constrained_gls_barra_base(asset_return, bb, *, weights='default', indus_ret_weights = 'default'):
         """Solving constrained gls problem using quadratic programming.
         
         asset_return: return of asset universe.

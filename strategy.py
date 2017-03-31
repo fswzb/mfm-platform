@@ -31,6 +31,8 @@ class strategy(object):
         self.position = position()
         # 调仓日，注意调仓日与策略数据中的日期一般不同，暂设为一个空series
         self.holding_days = pd.Series()
+        # 策略的股票池
+        self.strategy_data.stock_pool = 'all'
         
     # 初始化持仓类的函数
     def initialize_position(self, standard_data):
@@ -48,15 +50,20 @@ class strategy(object):
     def generate_holding_days(self):
         self.holding_days = pd.read_csv(str(os.path.abspath('.'))+'/holding_days.csv', 
                                         parse_dates = [0], squeeze = True)
-        print('Please note that, as the default method, \
-        the holding days has been read from the holding_days.csv file in current directory\n')
+        print('Please note that, as the default method,' \
+        'the holding days has been read from the holding_days.csv file in current directory\n')
         
     # 在持仓矩阵中过滤掉那些不能交易的股票
     def filter_untradable(self):
-        tradable_data = self.strategy_data.if_tradable.ix['if_tradable', 
-                                                          self.position.holding_matrix.index, :]
+        tradable_data = self.strategy_data.if_tradable.ix['if_tradable', self.position.holding_matrix.index, :]
         # 凡是有持仓的，但不能交易的，全部设为0持仓，注意此函数并未进行重新归一化
         self.position.holding_matrix *= tradable_data
+
+    # 在持仓矩阵中过滤掉那些不能投资的股票
+    def filter_uninv(self):
+        inv_data = self.strategy_data.if_tradable.ix['if_inv', self.position.holding_matrix.index, :]
+        # 凡是有持仓的，但不能投资的，全部设为0持仓，注意此函数并未进行重新归一化
+        self.position.holding_matrix *= inv_data
 
 
 

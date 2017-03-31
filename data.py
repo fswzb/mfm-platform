@@ -57,7 +57,7 @@ class data(object):
                                    index_col = 0, parse_dates = True, encoding='GB18030')
             if shift:
                 temp_df = temp_df.shift(1)
-            if file_name=='default':
+            if item_name == 'default':
                 obj[file_name[i]] = temp_df
             else:
                 obj[item_name[i]] = temp_df

@@ -13,11 +13,15 @@ from pandas import Series, DataFrame, Panel
 from datetime import datetime
 import os
 import statsmodels.api as sm
+import copy
 
 from data import data
 from strategy_data import strategy_data
 from position import position
 from strategy import strategy
+from backtest import backtest
+from barra_base import barra_base
+
 
 # 单因子表现测试
 
@@ -30,14 +34,30 @@ class single_factor_strategy(strategy):
         strategy.__init__(self)
         self.strategy_data.generate_if_tradable(shift = True)
         # 读取市值数据以进行市值加权
-        self.strategy_data.stock_price = data.read_data(['MarketValue'],['MarketValue'],shift = True)
+        self.strategy_data.stock_price = data.read_data(['FreeMarketValue'],['FreeMarketValue'],shift = True)
         
     # 读取因子数据的函数
     def read_factor_data(self, file_name, factor_name, *, shift = True):
         self.strategy_data.factor = data.read_data(file_name, factor_name, shift = shift)
+
+    # 生成调仓日的函数
+    # holding_freq为持仓频率，默认为月，这个参数将作为resample的参数
+    # start_date和end_date为调仓日的范围区间，默认为取数据的所有区间断
+    def generate_holding_days(self, *, holding_freq='m', start_date='default', end_date='default'):
+        # 读取free market value以其日期作为holding days的选取区间
+        holding_days = self.strategy_data.stock_price.ix['FreeMarketValue'].resample(holding_freq).\
+            apply(lambda x:x.index[-1] if x.size>0 else np.nan).dropna()
+        # holding days的index和值都是调仓日
+        holding_days = holding_days.set_index(holding_days)
+        # 根据传入参数截取需要的调仓日区间
+        if start_date != 'default':
+            holding_days = holding_days.ix[start_date:]
+        if end_date != 'default':
+            holding_days = holding_days.ix[:end_date]
+        self.holding_days = holding_days
         
-    # 选取股票，选股比例默认为最前的80%到100%，方向默认为因子越大越好，holding=1为市值加权，0为等权
-    def select_stocks(self, *, select_ratio = [0.8, 1], direction = '+', holding = 0):
+    # 选取股票，选股比例默认为最前的80%到100%，方向默认为因子越大越好，weight=1为市值加权，0为等权
+    def select_stocks(self, *, select_ratio = [0.8, 1], direction = '+', weight = 0):
         # 对调仓期进行循环
         for cursor, time in self.holding_days.iteritems():
             curr_factor_data = self.strategy_data.factor.ix[0, time, :]
@@ -64,17 +84,22 @@ class single_factor_strategy(strategy):
             self.position.holding_matrix.ix[time, selected_stocks] = 1
             
         # 循环结束
-        # 去除不可交易的股票
-        self.filter_untradable()
+        if self.strategy_data.stock_pool == 'all':
+            # 去除不可交易的股票
+            self.filter_untradable()
+        else:
+            # 有股票池的情况去除不可投资的股票
+            self.filter_uninv()
         # 设置为等权重
         self.position.to_percentage()
         # 如果需要市值加权，则市值加权
-        if holding == 1:
-            self.position.weighted_holding(self.strategy_data.stock_price.ix['MarketValue',
+        if weight == 1:
+            self.position.weighted_holding(self.strategy_data.stock_price.ix['FreeMarketValue',
                                            self.position.holding_matrix.index, :])
     
     # 单因子的因子收益率计算和检验，用来判断因子有效性，回归收益为调仓日之间的收益率
-    def get_factor_return(self):
+    # weights为用来回归的权重，默认为等权回归
+    def get_factor_return(self, *, weights='default'):
         # 如果没有price的数据，读入price数据，注意要shift，
         # 即本来的实现收益率应当是调仓日当天的开盘价，但这里计算调仓日前一个交易日的收盘价。
         if 'ClosePrice_adj' not in self.strategy_data.stock_price.items:
@@ -86,7 +111,7 @@ class single_factor_strategy(strategy):
         holding_day_return = np.log(holding_day_price.div(holding_day_price.shift(1)))
         holding_day_factor = self.strategy_data.factor.ix[0, self.holding_days, :]
         holding_day_factor_expo = strategy_data.get_cap_wgt_exposure(holding_day_factor,
-                                    self.strategy_data.stock_price.ix['MarketValue', self.holding_days, :])
+                                    self.strategy_data.stock_price.ix['FreeMarketValue', self.holding_days, :])
         # 注意因子暴露要用前一期的数据
         holding_day_factor_expo = holding_day_factor_expo.shift(1)
 
@@ -104,7 +129,10 @@ class single_factor_strategy(strategy):
             if y.isnull().all() or x.isnull().all():
                 continue
             x = sm.add_constant(x)
-            results = sm.OLS(y, x, missing='drop').fit()
+            if weights == 'default':
+                results = sm.WLS(y, x, missing='drop')
+            else:
+                results = sm.WLS(y, x, weights=weights.ix[time], missing='drop').fit()
             self.factor_return_series.ix[time] = results.params[1]
             self.t_stats_series.ix[time] = results.tvalues[1]
 
@@ -183,7 +211,7 @@ class single_factor_strategy(strategy):
         ax.set_title('The IC Time Series of The Factor')
         
     # 根据分位数分组选股，用来画同一因子不同分位数分组之间的收益率对比，以此判断因子的有效性
-    def select_qgroup(self, no_of_groups, group, *, direction = '+', holding = 0):
+    def select_qgroup(self, no_of_groups, group, *, direction = '+', weight = 0):
         # 对调仓期进行循环
         for cursor, time in self.holding_days.iteritems():
             curr_factor_data = self.strategy_data.factor.ix[0, time, :]
@@ -204,16 +232,193 @@ class single_factor_strategy(strategy):
             selected_stocks = curr_factor_data.ix[labeled_factor == group-1].index
             # 被选取股票的持仓调为1
             self.position.holding_matrix.ix[time, selected_stocks] = 1
-            
+
         # 循环结束
-        # 去除不可交易的股票
-        self.filter_untradable()
+        if self.strategy_data.stock_pool == 'all':
+            # 去除不可交易的股票
+            self.filter_untradable()
+        else:
+            # 有股票池的情况去除不可投资的股票
+            self.filter_uninv()
         # 设置为等权重
         self.position.to_percentage()
         # 如果需要市值加权，则市值加权
-        if holding == 1:
-            self.position.weighted_holding(self.strategy_data.stock_price.ix['MarketValue',
+        if weight == 1:
+            self.position.weighted_holding(self.strategy_data.stock_price.ix['FreeMarketValue',
                                            self.position.holding_matrix.index, :])
+    
+    # 循环画分位数图与long short图的函数
+    # 定义按因子分位数选股的函数，将不同分位数收益率画到一张图上，同时还会画long-short的图
+    # value=1为画净值曲线图，value=2为画对数收益率图，holding=0为等权，=1为市值加权
+    def plot_qgroup(self, bkt, no_of_groups, *, direction='+', value=1, weight=0):
+        # 默认画净值曲线图
+        if value == 1:
+            # 先初始化图片
+            f1 = plt.figure()
+            ax1 = f1.add_subplot(1, 1, 1)
+            ax1.set_xlabel('Time')
+            ax1.set_ylabel('Net Account Value')
+            ax1.set_title('Net Account Value Comparison of Different Quantile Groups of The Factor')
+
+            # 开始循环选股、画图
+            for group in range(no_of_groups):
+                # 选股
+                self.reset_position()
+                self.select_qgroup(no_of_groups, group + 1, direction=direction, weight=weight)
+
+                # 回测
+                bkt.reset_bkt_position(self.position)
+                bkt.execute_backtest()
+                bkt.initialize_performance()
+
+                # 画图，注意，这里画净值曲线图，差异很小时，净值曲线图的差异更明显
+                plt.plot(bkt.bkt_performance.net_account_value, label='Group %s' % str(group + 1))
+
+                # 储存第一组和最后一组以画long-short收益图
+                if group == 0:
+                    long_series = bkt.bkt_performance.net_account_value
+                elif group == no_of_groups - 1:
+                    short_series = bkt.bkt_performance.net_account_value
+
+            ax1.legend(loc='best')
+
+            # 画long-short的图
+            f2 = plt.figure()
+            ax2 = f2.add_subplot(1, 1, 1)
+            ax2.set_xlabel('Time')
+            ax2.set_ylabel('Net Account Value')
+            ax2.set_title('Net Account Value of Long-Short Portfolio of The Factor')
+            plt.plot(long_series - short_series)
+
+        elif value == 2:
+            # 先初始化图片
+            f1 = plt.figure()
+            ax1 = f1.add_subplot(1, 1, 1)
+            ax1.set_xlabel('Time')
+            ax1.set_ylabel('Cumulative Log Return (%)')
+            ax1.set_title('Cumulative Log Return Comparison of Different Quantile Groups of The Factor')
+
+            # 开始循环选股、画图
+            for group in range(no_of_groups):
+                # 选股
+                self.reset_position()
+                self.select_qgroup(no_of_groups, group + 1, direction=direction, weight=weight)
+
+                # 回测
+                bkt.reset_bkt_position(self.position)
+                bkt.execute_backtest()
+                bkt.initialize_performance()
+
+                # 画图，注意，这里画累积对数收益图，当差异很大时，累积对数收益图看起来更容易
+                plt.plot(bkt.bkt_performance.cum_log_return * 100, label='Group %s' % str(group + 1))
+
+                # 储存第一组和最后一组以画long-short收益图
+                if group == 0:
+                    long_series = bkt.bkt_performance.cum_log_return
+                elif group == no_of_groups - 1:
+                    short_series = bkt.bkt_performance.cum_log_return
+
+            ax1.legend(loc='best')
+
+            # 画long-short的图
+            f2 = plt.figure()
+            ax2 = f2.add_subplot(1, 1, 1)
+            ax2.set_xlabel('Time')
+            ax2.set_ylabel('Cumulative Log Return (%)')
+            ax2.set_title('Cumulative Log Return of Long-Short Portfolio of The Factor')
+            plt.plot((long_series - short_series) * 100)
+
+    # 根据一个股票池进行一次完整的单因子测试的函数
+    def single_factor_test(self, factor, *, direction='+', bkt_obj='Empty', bb_obj='Empty', pa_benchmark_position='default',
+                           discard_factor=[]):
+        # 如果传入的是str，则读取同名文件，如果是dataframe，则直接传入因子
+        if type(factor) == str:
+            self.read_factor_data(factor, factor, shift=True)
+        else:
+            self.strategy_data.factor[0] = factor
+
+        # 生成调仓日
+        if self.holding_days.empty:
+            self.generate_holding_days()
+        # 根据股票池生成标记
+        self.strategy_data.handle_stock_pool(shift=True)
+        # 除去不可交易或不可投资的数据
+        if self.strategy_data.stock_pool == 'all':
+            self.strategy_data.discard_untradable_data()
+        else:
+            self.strategy_data.discard_uninv_data()
+        # 初始化持仓
+        if self.position.holding_matrix.empty:
+            self.initialize_position(self.strategy_data.factor.ix[0, self.holding_days, :])
+        
+        # 简单分位数选股
+        self.select_stocks(weight=1, direction=direction)
+
+        # 如果有外来的backtest对象，则使用这个backtest对象，如果没有，则需要自己建立，同时传入最新持仓
+        if bkt_obj == 'Empty':
+            bkt_obj = backtest(self.position, bkt_start='default', bkt_end='default')
+        else:
+            bkt_obj.reset_bkt_position(self.position)
+        # 回测、画图、归因
+        bkt_obj.execute_backtest()
+        bkt_obj.get_performance()
+        bkt_obj.get_performance_attribution(outside_bb=bb_obj, benchmark_position=pa_benchmark_position,
+                                            discard_factor=discard_factor, show_warning=True)
+        # 画单因子组合收益率
+        self.get_factor_return(weights=np.sqrt(self.strategy_data.stock_price.ix['FreeMarketValue']))
+        # 画ic的走势图
+        self.get_factor_ic(direction=direction)
+        # 画分位数图和long short图
+        self.plot_qgroup(bkt_obj, 5, direction=direction, value=1, weight=0)
+
+    # 根据多个股票池进行一次完整的单因子测试
+    def sf_test_multiple_pools(self, *, factor, direction='+', bb_obj='Empty', discard_factor=[],
+                               stock_pools=['all', 'hs300', 'zz500', 'zz800']):
+        # 如果传入的是str，则读取同名文件，如果是dataframe，则直接传入因子
+        # 注意：这里的因子数据并且储存到self.strategy_data.factor中，因为循环股票池会丢失数据
+        # 这里实际上是希望每次循环都有一个新的single factor strategy对象，
+        # 而这个函数的目的则是每次循环不用再重新建立这个对象
+        if type(factor) == str:
+            factor_data = data.read_data([factor], [factor], shift=True)
+            factor = factor_data[factor]
+        # 生成调仓日
+        self.generate_holding_days()
+        # 初始化持仓
+        self.initialize_position(factor.ix[self.holding_days,:])
+        # 先要初始化bkt对象
+        bkt_obj = backtest(self.position, bkt_start='default', bkt_end='default')
+        # 建立bb对象，否则之后每次循环都要建立一次新的bb对象
+        if bb_obj == 'Empty':
+            bb_obj = barra_base()
+            bb_obj.construct_barra_base()
+        # 外部传入的bb对象，要检测其股票池是否为all，如果不是all，则输出警告，因为可能丢失了数据
+        else:
+            if bb_obj.bb_data.stock_pool != 'all':
+                print('The stockpool of the barra_base obj from outside is NOT "all", be aware of possibile'
+                      'data loss due to this situation!\n')
+
+        # 根据股票池进行循环
+        for stock_pool in stock_pools:
+            # 将回测的基准改为当前的股票池，若为all，则用默认的基准值
+            if stock_pool != 'all':
+                bkt_obj.reset_bkt_benchmark('ClosePrice_'+stock_pool)
+            # 重置策略持仓
+            self.reset_position()
+            # 将策略的股票池设置为当前股票池
+            self.strategy_data.stock_pool = stock_pool
+            # 将bb的股票池改为当前股票池
+            bb_obj.bb_data.stock_pool = stock_pool
+            # 根据股票池生成标记
+            bb_obj.bb_data.handle_stock_pool()
+
+            # 进行当前股票池下的单因子测试
+            # 注意bb obj进行了一份深拷贝，这是因为在业绩归因的计算中，会根据不同的股票池丢弃数据，导致数据不全，因此不能传引用
+            self.single_factor_test(factor, direction=direction, bkt_obj=bkt_obj, bb_obj=copy.deepcopy(bb_obj),
+                                    discard_factor=discard_factor)
+
+
+
+
                 
         
         

@@ -28,14 +28,7 @@ class performance_attribution(object):
     foo
     """
 
-    def __init__(self, input_position, *, mv='default', benchmark_position='default', stock_returns='default',
-                 portfolio_returns='default'):
-        self.pa_data = strategy_data()
-        # 市值数据可传入或自动读取
-        if mv == 'default':
-            self.pa_data.stock_price = data.read_data(['MarketValue'], ['MarketValue'])
-        else:
-            self.pa_data.stock_price = pd.Panel({'MarketValue': mv})
+    def __init__(self, input_position, *, benchmark_position='default', portfolio_returns='default'):
         self.pa_position = input_position
 
         # 如果传入基准持仓数据，则归因超额收益
@@ -44,15 +37,6 @@ class performance_attribution(object):
             self.pa_position.holding_matrix = self.pa_position.holding_matrix.sub(benchmark_position.holding_matrix,
                                                                                   fill_value=0)
             self.is_benchmark = True
-
-        # 如果没有传入股票收益数据，则读入股票价格自己计算
-        if stock_returns == 'default':
-            temp_closeprice = data.read_data(['ClosePrice_adj'], ['ClosePrice_adj'])
-            self.pa_data.stock_price['ClosePrice_adj'] = temp_closeprice.ix['ClosePrice_adj']
-            self.stock_returns = np.log(self.pa_data.stock_price.ix['ClosePrice_adj'].div(
-                self.pa_data.stock_price.ix['ClosePrice_adj'].shift(1)))
-        else:
-            self.stock_returns = stock_returns
 
         # 如果有传入组合收益，则直接用这个组合收益，如果没有则自己计算
         self.port_returns = pd.DataFrame()
@@ -73,17 +57,24 @@ class performance_attribution(object):
 
         self.discarded_stocks_num = pd.DataFrame()
         self.discarded_stocks_wgt = pd.DataFrame()
-        
+
+    # 建立barra因子库，有些时候可以直接用在其他地方（如策略中）已计算出的barra因子库，就可以不必计算了
+    def construnct_bb(self, *, outside_bb='Empty'):
+        if outside_bb == 'Empty':
+            self.bb.construct_barra_base()
+        else:
+            self.bb = outside_bb
+            # 外部的bb，可能股票池并不等于当前股票池，需要对当前股票池重新计算暴露
+            self.bb.just_get_factor_expo()
+
     # 进行业绩归因
     # 用discard_factor可以定制用来归因的因子，将不需要的因子的名字或序号以list写入即可
     # 注意，只能用来删除风格因子，不能用来删除行业因子或country factor
-    def execute_performance_attribution(self, *, discard_factor=[]):
-        # 建立barra因子库
-        self.bb.construct_barra_base()
+    def get_pa_return(self, *, discard_factor=[]):
         # 将被删除的风格因子的暴露全部设置为0
         self.bb.bb_data.factor_expo.ix[discard_factor, :, :] = 0
         # 再次将不能交易的值设置为nan
-        self.bb.bb_data.discard_untradable_data()
+        self.bb.bb_data.discard_uninv_data()
         # 建立储存因子收益的dataframe
         self.pa_returns = pd.DataFrame(0, index=self.bb.bb_data.factor_expo.major_axis, 
                                        columns = self.bb.bb_data.factor_expo.items)
@@ -100,6 +91,10 @@ class performance_attribution(object):
         # 根据因子收益和因子暴露计算组合在因子上的收益
         self.port_pa_returns = self.pa_returns.mul(self.port_expo)
 
+        # 将组合因子收益和因子暴露数据重索引为pa position的时间（即持仓区间），原时间为barra base的区间
+        self.port_expo = self.port_expo.reindex(self.pa_position.holding_matrix.index)
+        self.port_pa_returns = self.port_pa_returns.reindex(self.pa_position.holding_matrix.index)
+
         # 计算各类因子的总收益情况
         # 风格因子收益
         self.style_factor_returns = self.port_pa_returns.ix[:, 0:10].sum(1)
@@ -110,7 +105,8 @@ class performance_attribution(object):
 
         # 如果需要，则直接根据股票收益算出组合的收益
         if not self.is_port_ret_imported:
-            self.port_returns = self.pa_position.holding_matrix.mul(self.stock_returns, fill_value=0)
+            self.port_returns = self.pa_position.holding_matrix.mul(self.bb.bb_data.stock_price.ix['daily_return']). \
+                reindex(self.pa_position.holding_matrix.index).sum(1)
 
         # 残余收益，即alpha收益，为组合收益减去之前那些因子的收益
         # 注意下面会提到，缺失数据会使得残余收益变大
@@ -122,7 +118,7 @@ class performance_attribution(object):
     # 注意，此类股票的出现必然导致归因的不准确，因为它们归入到了组合总收益中，但不会被归入到缺少暴露值的因子收益中，因此进入到残余收益中
     # 这样不仅会使得残余收益含入因子收益，而且使得残余收益与因子收益之间具有显著相关性
     # 如果这样暴露缺失的股票比例很大，则使得归因不具有参考价值
-    def handle_discarded_stocks(self):
+    def handle_discarded_stocks(self, *, show_warning=True):
         self.discarded_stocks_num = self.pa_returns.mul(0)
         self.discarded_stocks_wgt = self.pa_returns.mul(0)
         # 因子暴露有缺失值，没有参与归因的股票
@@ -138,15 +134,16 @@ class performance_attribution(object):
         self.discarded_stocks_wgt['total'] = self.discarded_stocks_wgt.sum(1)
 
         # 循环输出警告
-        for time, temp_data in self.discarded_stocks_num.iterrows():
-            # 一旦没有归因的股票数超过总持股数的10%，或其权重超过10%，则输出警告
-            if temp_data.ix['total'] >= 0.1*((self.pa_position.holding_matrix.ix[time] != 0).sum()) or \
-            self.discarded_stocks_wgt.ix[time, 'total'] >= 0.1:
-                print('At time: {0}, the number of stocks(*discarded times) held but discarded in performance attribution '
-                      'is: {1}, the weight of these stocks(*discarded times) is: {2}.\nThus the outcome of performance '
-                      'attribution at this time can be significantly distorted. Please check discarded_stocks_num and '
-                      'discarded_stocks_wgt for more information.\n'.format(time, temp_data.ix['total'],
-                                                                            self.discarded_stocks_wgt.ix[time, 'total']))
+        if show_warning:
+            for time, temp_data in self.discarded_stocks_num.iterrows():
+                # 一旦没有归因的股票数超过总持股数的10%，或其权重超过10%，则输出警告
+                if temp_data.ix['total'] >= 0.1*((self.pa_position.holding_matrix.ix[time] != 0).sum()) or \
+                self.discarded_stocks_wgt.ix[time, 'total'] >= 0.1:
+                    print('At time: {0}, the number of stocks(*discarded times) held but discarded in performance attribution '
+                          'is: {1}, the weight of these stocks(*discarded times) is: {2}.\nThus the outcome of performance '
+                          'attribution at this time can be significantly distorted. Please check discarded_stocks_num and '
+                          'discarded_stocks_wgt for more information.\n'.format(time, temp_data.ix['total'],
+                                                                                self.discarded_stocks_wgt.ix[time, 'total']))
 
     # 进行画图
     def plot_performance_attribution(self):
@@ -198,6 +195,34 @@ class performance_attribution(object):
         ax5.set_ylabel('Cumulative Factor Exposures')
         ax5.set_title('The Cumulative Industrial Factor Exposures of the Portfolio')
         ax5.legend(loc='best')
+
+        # 第六张图画组合的每日风格暴露
+        f6 = plt.figure()
+        ax6 = f6.add_subplot(1, 1, 1)
+        self.port_expo.ix[:, 0:10].plot()
+        ax6.set_xlabel('Time')
+        ax6.set_ylabel('Factor Exposures')
+        ax6.set_title('The Style Factor Exposures of the Portfolio')
+        ax6.legend(loc='best')
+
+        # 第七张图画组合的累计行业暴露
+        f7 = plt.figure()
+        ax7 = f7.add_subplot(1, 1, 1)
+        self.port_expo.ix[:, 10:38].plot()
+        ax7.set_xlabel('Time')
+        ax7.set_ylabel('Factor Exposures')
+        ax7.set_title('The Industrial Factor Exposures of the Portfolio')
+        ax7.legend(loc='best')
+
+    # 进行业绩归因
+    def execute_performance_attribution(self, *, outside_bb='Empty', discard_factor=[], show_warning=True):
+        self.construnct_bb(outside_bb=outside_bb)
+        self.get_pa_return(discard_factor=discard_factor)
+        self.analyze_pa_outcome()
+        self.handle_discarded_stocks(show_warning=show_warning)
+
+
+
 
 
 
