@@ -62,7 +62,7 @@ class strategy_data(data):
 
         # 新建一个if_inv，表明在股票池中，且可以交易
         # 在if_tradable中为true，且在if_inpool中为true，才可投资，即在if_inv中为true
-        self.if_tradable.ix['if_inv'] = np.logical_and(self.if_tradable.ix['if_tradable'], self.if_tradable.ix['if_inpool'])
+        self.if_tradable['if_inv'] = np.logical_and(self.if_tradable.ix['if_tradable'], self.if_tradable.ix['if_inpool'])
 
     # 对数据进行winsorization
     @staticmethod

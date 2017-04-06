@@ -350,16 +350,16 @@ class barra_base(object):
     
     # 计算residual volatility
     def get_residual_volatility(self):
-        self.get_rv_dastd()
-        self.get_rv_cmra()
-        self.get_rv_hsigma()
-        # 过滤数据，因为之前的因子数据之后要正交化，会影响计算
-        # 此处为barra base计算中第一次过滤掉uninv数据，此后的数据都不能再储存，因为依赖于stock pool
-        self.bb_data.discard_uninv_data()
         if os.path.isfile('rv.csv') and not self.is_update:
             rv = data.read_data(['rv'], ['rv'])
             self.bb_data.factor['rv'] = rv.ix['rv']
         else:
+            self.get_rv_dastd()
+            self.get_rv_cmra()
+            self.get_rv_hsigma()
+            # 过滤数据，因为之前的因子数据之后要正交化，会影响计算
+            # 此处为barra base计算中第一次过滤掉uninv数据，此后的数据都不能再储存，因为依赖于stock pool
+            self.bb_data.discard_uninv_data()
             # 计算三个成分因子的暴露
             self.bb_data.raw_data['dastd_expo'] = strategy_data.get_cap_wgt_exposure( 
                     self.bb_data.raw_data.ix['dastd'], self.bb_data.stock_price.ix['FreeMarketValue'])
@@ -465,15 +465,15 @@ class barra_base(object):
 
     # 计算liquidity
     def get_liquidity(self):
-        self.get_liq_stom()
-        self.get_liq_stoq()
-        self.get_liq_stoa()
-        # 过滤数据
-        self.bb_data.discard_uninv_data()
         if os.path.isfile('liquidity.csv') and not self.is_update:
             liquidity = data.read_data(['liquidity'], ['liquidity'])
             self.bb_data.factor['liquidity'] = liquidity.ix['liquidity']
         else:
+            self.get_liq_stom()
+            self.get_liq_stoq()
+            self.get_liq_stoa()
+            # 过滤数据
+            self.bb_data.discard_uninv_data()
             # 计算三个成分因子的暴露
             self.bb_data.raw_data['stom_expo'] = strategy_data.get_cap_wgt_exposure( 
                     self.bb_data.raw_data.ix['stom'], self.bb_data.stock_price.ix['FreeMarketValue'])
@@ -542,14 +542,14 @@ class barra_base(object):
 
     # 计算earnings yield
     def get_earnings_yeild(self):
-        self.get_ey_epfwd()
-        self.get_ey_cetop()
-        self.get_ey_etop()
-        self.bb_data.discard_uninv_data()
         if os.path.isfile('ey.csv') and not self.is_update:
             EarningsYield = data.read_data(['ey'], ['ey'])
             self.bb_data.factor['ey'] = EarningsYield.ix['ey']
         else:
+            self.get_ey_epfwd()
+            self.get_ey_cetop()
+            self.get_ey_etop()
+            self.bb_data.discard_uninv_data()
             # 计算三个成分因子的暴露
             self.bb_data.raw_data['epfwd_expo'] = strategy_data.get_cap_wgt_exposure(
                 self.bb_data.raw_data.ix['epfwd'], self.bb_data.stock_price.ix['FreeMarketValue'])
@@ -604,15 +604,15 @@ class barra_base(object):
 
     # 计算growth
     def get_growth(self):
-        self.get_g_egrlf()
-        self.get_g_egrsf()
-        self.get_g_egro()
-        self.get_g_sgro()
-        self.bb_data.discard_uninv_data()
         if os.path.isfile('growth.csv') and not self.is_update:
             growth = data.read_data(['growth'], ['growth'])
             self.bb_data.factor['growth'] = growth.ix['growth']
         else:
+            self.get_g_egrlf()
+            self.get_g_egrsf()
+            self.get_g_egro()
+            self.get_g_sgro()
+            self.bb_data.discard_uninv_data()
             # 计算四个成分因子的暴露
             self.bb_data.raw_data['egrlf_expo'] = strategy_data.get_cap_wgt_exposure(
                 self.bb_data.raw_data.ix['egrlf'], self.bb_data.stock_price.ix['FreeMarketValue'])
@@ -657,8 +657,11 @@ class barra_base(object):
         # 读取行业信息数据
         industry = data.read_data(['Industry'],['Industry'])
         self.industry = industry.ix['Industry']
-        # 对第一个日期取虚拟变量，以建立储存数据的panel
-        temp_dum = pd.get_dummies(self.industry.ix[0], prefix='Industry')
+        # 对第一个拥有所有行业的日期取虚拟变量，以建立储存数据的panel
+        industry_num = self.industry.apply(lambda x:x.unique().size, axis=1)
+        # 注意所有行业28个，加上nan有29个
+        first_valid_index = industry_num[industry_num==29].index[0]
+        temp_dum = pd.get_dummies(self.industry.ix[first_valid_index], prefix='Industry')
         industry_dummies = pd.Panel(data=None, major_axis = temp_dum.index, minor_axis = temp_dum.columns)
         # 开始循环
         for time, ind_data in self.industry.iterrows():
@@ -667,6 +670,9 @@ class barra_base(object):
         industry_dummies = industry_dummies.transpose(2,0,1)
         # 将行业因子暴露与风格因子暴露的索引对其
         industry_dummies = data.align_index(self.bb_data.factor_expo.ix[0], industry_dummies)
+        # 将nan填成0，主要是有些行业在某一时间点，没有一只股票属于它，这会造成在这个行业上的暴露是nan
+        # 因此需要把这个行业的暴露填成0，而uninv的nan同样会被填上，但会在之后的filter中再次变成nan
+        industry_dummies = industry_dummies.fillna(0)
         # 将行业因子暴露与风格因子暴露衔接在一起
         self.bb_data.factor_expo = pd.concat([self.bb_data.factor_expo, industry_dummies])
         
@@ -680,38 +686,47 @@ class barra_base(object):
         self.bb_data.factor_expo = pd.concat([self.bb_data.factor_expo, constant])
 
     # 构建barra base的所有风格因子和行业因子
-    def construct_barra_base(self):
+    def construct_barra_base(self, *, if_save=False):
         # 读取数据，更新数据则不用读取，因为已经存在
         if not self.is_update:
             self.read_original_data()
         # 创建风格因子
         self.get_lncap()
-        self.get_beta()
+        self.get_beta_parallel()
+        print('get beta completed...\n')
         self.get_momentum()
+        print('get momentum completed...\n')
         self.get_residual_volatility()
+        print('get rv completed...\n')
         self.get_nonlinear_size()
+        print('get nls completed...\n')
         self.get_pb()
         self.get_liquidity()
+        print('get liquidity completed...\n')
         self.get_earnings_yeild()
+        print('get ey completed...\n')
         self.get_growth()
         self.get_leverage()
+        print('get leverage completed...\n')
         # 计算风格因子暴露之前再过滤一次
         self.bb_data.discard_uninv_data()
         # 计算风格因子暴露
         self.get_style_factor_exposure()
+        print('get style factor expo completed...\n')
         # 加入行业暴露
         self.get_industry_factor()
+        print('get indus factor expo completed...\n')
         # 添加国家因子
         self.add_country_factor()
         # 计算的最后，过滤数据
         self.bb_data.discard_uninv_data()
 
-        # 如果不是更新数据且股票池为所有股票，则储存因子值数据
-        # 还需要求为非外部调用的情况
+        # 如果显示指定了储存数据且股票池为所有股票，则储存因子值数据
+        # 注意，即便显示指定了储存数据，但股票池不是所有股票，仍不会进行储存
         if not self.is_update and self.bb_data.stock_pool == 'all' and __name__=='__main__':
             data.write_data(self.bb_data.factor)
 
-    # 仅计算barra base的因子暴露，主要用于对与不同股票池，可以在不重新建立新对象的情况下，算不同的因子暴露
+    # 仅计算barra base的因子暴露，主要用于对与不同股票池，可以在不重新建立新对象的情况下，根据已有因子值算不同的因子暴露
     def just_get_factor_expo(self):
         self.bb_data.discard_uninv_data()
         self.get_style_factor_exposure()
@@ -736,7 +751,7 @@ class barra_base(object):
                        weights = np.sqrt(lag_mv.ix[time, :]),
                        indus_ret_weights = lag_mv.ix[time, :])
             self.bb_factor_return.ix[time, :] = outcome[0]
-            print(time)
+        print('get bb factor return completed...\n')
 
     # 更新数据
     def update_barra_base_factor_data(self):
@@ -776,8 +791,6 @@ class barra_base(object):
 
 if __name__ == '__main__':
     test = barra_base()
-    test.read_original_data()
-    test.get_lncap()
-    test.get_beta_parallel()
+    test.construct_barra_base(if_save=True)
     pass
 

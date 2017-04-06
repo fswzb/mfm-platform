@@ -33,7 +33,7 @@ class performance_attribution(object):
 
         # 如果传入基准持仓数据，则归因超额收益
         self.is_benchmark = False
-        if benchmark_position != 'default':
+        if type(benchmark_position) != str:
             self.pa_position.holding_matrix = self.pa_position.holding_matrix.sub(benchmark_position.holding_matrix,
                                                                                   fill_value=0)
             self.is_benchmark = True
@@ -41,7 +41,7 @@ class performance_attribution(object):
         # 如果有传入组合收益，则直接用这个组合收益，如果没有则自己计算
         self.port_returns = pd.DataFrame()
         self.is_port_ret_imported = False
-        if portfolio_returns != 'default':
+        if type(portfolio_returns) != str:
             self.port_returns = portfolio_returns
             self.is_port_ret_imported = True
 
@@ -66,6 +66,7 @@ class performance_attribution(object):
             self.bb = outside_bb
             # 外部的bb，可能股票池并不等于当前股票池，需要对当前股票池重新计算暴露
             self.bb.just_get_factor_expo()
+            pass
 
     # 进行业绩归因
     # 用discard_factor可以定制用来归因的因子，将不需要的因子的名字或序号以list写入即可
@@ -82,14 +83,20 @@ class performance_attribution(object):
         self.bb.get_bb_factor_return()
         # barra base因子的因子收益即是归因的因子收益
         self.pa_returns = self.bb.bb_factor_return
+        # 将pa_returns的时间轴改为业绩归因的时间轴（而不是bb的时间轴）
+        self.pa_returns = self.pa_returns.reindex(self.pa_position.holding_matrix.index)
 
     # 将归因的结果进行整理
     def analyze_pa_outcome(self):
         # 首先根据持仓比例计算组合在各个因子上的暴露
-        self.port_expo = np.einsum('ijk,jk->ji', self.bb.bb_data.factor_expo.fillna(0), self.pa_position.holding_matrix)
+        self.port_expo = np.einsum('ijk,jk->ji', self.bb.bb_data.factor_expo.reindex(
+                major_axis=self.pa_position.holding_matrix.index).fillna(0),
+            self.pa_position.holding_matrix.fillna(0))
+        self.port_expo = pd.DataFrame(self.port_expo, index=self.pa_returns.index, 
+                                      columns=self.bb.bb_data.factor_expo.items)
 
-        # 根据因子收益和因子暴露计算组合在因子上的收益
-        self.port_pa_returns = self.pa_returns.mul(self.port_expo)
+        # 根据因子收益和因子暴露计算组合在因子上的收益，注意因子暴露用的是组合上一期的因子暴露
+        self.port_pa_returns = self.pa_returns.mul(self.port_expo.shift(1))
 
         # 将组合因子收益和因子暴露数据重索引为pa position的时间（即持仓区间），原时间为barra base的区间
         self.port_expo = self.port_expo.reindex(self.pa_position.holding_matrix.index)
@@ -112,6 +119,7 @@ class performance_attribution(object):
         # 注意下面会提到，缺失数据会使得残余收益变大
         self.residual_returns = self.port_returns - (self.style_factor_returns+self.industry_factor_returns+
                                                      self.country_factor_return)
+        pass
 
     # 处理那些没有归因的股票，即有些股票被策略选入，但因没有因子暴露值，而无法纳入归因的股票
     # 此dataframe处理这些股票，储存每期这些股票的个数，以及它们在策略中的持仓权重
@@ -122,9 +130,9 @@ class performance_attribution(object):
         self.discarded_stocks_num = self.pa_returns.mul(0)
         self.discarded_stocks_wgt = self.pa_returns.mul(0)
         # 因子暴露有缺失值，没有参与归因的股票
-        if_discarded = self.bb.bb_data.factor_expo.isnull()
+        if_discarded = self.bb.bb_data.factor_expo.reindex(major_axis=self.pa_position.holding_matrix.index).isnull()
         # 没有参与归因，同时还持有了
-        discarded_and_held = if_discarded.mul(self.pa_position.holding_matrix, axis='items').astype(bool)
+        discarded_and_held = if_discarded.mul(self.pa_position.holding_matrix.fillna(0), axis='items').astype(bool)
         # 各个因子没有参与归因的股票个数与持仓比例
         self.discarded_stocks_num = discarded_and_held.sum(2)
         # 注意：如果有benchmark传入，则持仓为负数，这时为了反应绝对量，持仓比例要取绝对值
@@ -136,18 +144,25 @@ class performance_attribution(object):
         # 循环输出警告
         if show_warning:
             for time, temp_data in self.discarded_stocks_num.iterrows():
-                # 一旦没有归因的股票数超过总持股数的10%，或其权重超过10%，则输出警告
-                if temp_data.ix['total'] >= 0.1*((self.pa_position.holding_matrix.ix[time] != 0).sum()) or \
-                self.discarded_stocks_wgt.ix[time, 'total'] >= 0.1:
+                # 一旦没有归因的股票数超过总持股数的100%，或其权重超过100%，则输出警告
+                if temp_data.ix['total'] >= 1*((self.pa_position.holding_matrix.ix[time] != 0).sum()) or \
+                self.discarded_stocks_wgt.ix[time, 'total'] >= 1:
                     print('At time: {0}, the number of stocks(*discarded times) held but discarded in performance attribution '
                           'is: {1}, the weight of these stocks(*discarded times) is: {2}.\nThus the outcome of performance '
                           'attribution at this time can be significantly distorted. Please check discarded_stocks_num and '
                           'discarded_stocks_wgt for more information.\n'.format(time, temp_data.ix['total'],
                                                                                 self.discarded_stocks_wgt.ix[time, 'total']))
+        # 输出总的缺失情况：
+        print('The average number of stocks(*discarded times) held but discarded in the pa is: {0}, the weight of these '
+              'stocks(*discarded times) is: {1}.\n'.format(self.discarded_stocks_num['total'].mean(),
+                                                           self.discarded_stocks_wgt['total'].mean()))
 
     # 进行画图
     def plot_performance_attribution(self):
-
+        # 处理中文图例的字体文件
+        from matplotlib.font_manager import FontProperties
+        chifont = FontProperties(fname='/System/Library/Fonts/STHeiti Light.ttc')      
+        
         # 第一张图分解组合的累计收益来源
         f1 = plt.figure()
         ax1 = f1.add_subplot(1,1,1)
@@ -163,56 +178,75 @@ class performance_attribution(object):
         # 第二张图分解组合的累计风格收益
         f2 = plt.figure()
         ax2 = f2.add_subplot(1,1,1)
-        (self.port_pa_returns.ix[:, 0:10].cumsum(0)*100).plot()
+        plt.plot((self.port_pa_returns.ix[:, 0:10].cumsum(0)*100))
         ax2.set_xlabel('Time')
         ax2.set_ylabel('Cumulative Log Return (%)')
         ax2.set_title('The Cumulative Log Return of Style Factors')
-        ax2.legend(loc='best')
+        ax2.legend(self.port_pa_returns.columns[0:10], loc='best')
 
         # 第三张图分解组合的累计行业收益
+        # 行业图示只给出最大和最小的5个行业
+        qualified_rank = [1,2,3,4,5,28,27,26,25,24]
         f3 = plt.figure()
         ax3 = f3.add_subplot(1, 1, 1)
-        (self.port_pa_returns.ix[:, 10:38].cumsum(0) * 100).plot()
+        indus_rank = self.port_pa_returns.ix[:, 10:38].cumsum(0).ix[-1].rank(ascending=False)
+        for i, j in enumerate(self.port_pa_returns.ix[:, 10:38].columns):
+            if indus_rank[j] in qualified_rank:
+                plt.plot((self.port_pa_returns.ix[:, j].cumsum(0) * 100), label=j+str(indus_rank[j]))
+            else:
+                plt.plot((self.port_pa_returns.ix[:, j].cumsum(0) * 100), label='_nolegend_')
         ax3.set_xlabel('Time')
         ax3.set_ylabel('Cumulative Log Return (%)')
         ax3.set_title('The Cumulative Log Return of Industrial Factors')
-        ax3.legend(loc='best')
+        ax3.legend(loc='best', prop=chifont)
 
         # 第四张图画组合的累计风格暴露
         f4 = plt.figure()
         ax4 = f4.add_subplot(1, 1, 1)
-        self.port_expo.ix[:, 0:10].cumsum(0).plot()
+        plt.plot(self.port_expo.ix[:, 0:10].cumsum(0))
         ax4.set_xlabel('Time')
         ax4.set_ylabel('Cumulative Factor Exposures')
         ax4.set_title('The Cumulative Style Factor Exposures of the Portfolio')
-        ax4.legend(loc='best')
+        ax4.legend(self.port_expo.columns[0:10], loc='best')
 
         # 第五张图画组合的累计行业暴露
         f5 = plt.figure()
         ax5 = f5.add_subplot(1, 1, 1)
-        self.port_expo.ix[:, 10:38].cumsum(0).plot()
+        # 累计暴露最大和最小的5个行业
+        indus_rank = self.port_expo.ix[:, 10:38].cumsum(0).ix[-1].rank(ascending=False)
+        for i, j in enumerate(self.port_expo.ix[:, 10:38].columns):
+            if indus_rank[j] in qualified_rank:
+                plt.plot((self.port_expo.ix[:, j].cumsum(0) * 100), label=j+str(indus_rank[j]))
+            else:
+                plt.plot((self.port_expo.ix[:, j].cumsum(0) * 100), label='_nolegend_')
         ax5.set_xlabel('Time')
         ax5.set_ylabel('Cumulative Factor Exposures')
         ax5.set_title('The Cumulative Industrial Factor Exposures of the Portfolio')
-        ax5.legend(loc='best')
+        ax5.legend(loc='best', prop=chifont)
 
         # 第六张图画组合的每日风格暴露
         f6 = plt.figure()
         ax6 = f6.add_subplot(1, 1, 1)
-        self.port_expo.ix[:, 0:10].plot()
+        plt.plot(self.port_expo.ix[:, 0:10])
         ax6.set_xlabel('Time')
         ax6.set_ylabel('Factor Exposures')
         ax6.set_title('The Style Factor Exposures of the Portfolio')
-        ax6.legend(loc='best')
+        ax6.legend(self.port_expo.columns[0:10], loc='best')
 
-        # 第七张图画组合的累计行业暴露
+        # 第七张图画组合的每日行业暴露
         f7 = plt.figure()
         ax7 = f7.add_subplot(1, 1, 1)
-        self.port_expo.ix[:, 10:38].plot()
+        # 平均暴露最大和最小的5个行业
+        indus_rank = self.port_expo.ix[:, 10:38].mean(0).rank(ascending=False)
+        for i, j in enumerate(self.port_expo.ix[:, 10:38].columns):
+            if indus_rank[j] in qualified_rank:
+                plt.plot((self.port_expo.ix[:, j] * 100), label=j+str(indus_rank[j]))
+            else:
+                plt.plot((self.port_expo.ix[:, j] * 100), label='_nolegend_')
         ax7.set_xlabel('Time')
         ax7.set_ylabel('Factor Exposures')
         ax7.set_title('The Industrial Factor Exposures of the Portfolio')
-        ax7.legend(loc='best')
+        ax7.legend(loc='best', prop=chifont)
 
     # 进行业绩归因
     def execute_performance_attribution(self, *, outside_bb='Empty', discard_factor=[], show_warning=True):

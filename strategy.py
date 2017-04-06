@@ -65,6 +65,15 @@ class strategy(object):
         # 凡是有持仓的，但不能投资的，全部设为0持仓，注意此函数并未进行重新归一化
         self.position.holding_matrix *= inv_data
 
+    # 根据一个传入的时间序列数据，根据频率生成调仓周期的函数
+    # 传入的时间序列可以是series，也可以是dataframe
+    @staticmethod
+    def resample_tradingdays(time_series, *, freq='m'):
+        resampled_tds = time_series.resample(freq).apply(lambda x:x.index[-1] if x.size>0 else np.nan).dropna()
+        # 将resampled_tds改为一个索引和值都是做好的交易日的series
+        resampled_tds = pd.Series(resampled_tds.values, index=resampled_tds.values)
+        return resampled_tds
+
 
 
                                           

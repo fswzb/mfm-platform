@@ -60,8 +60,11 @@ class backtest(object):
         self.bkt_data.if_tradable = data.align_index(self.bkt_position.holding_matrix, self.bkt_data.if_tradable, 
                                                      axis = 'minor')
         
-        # 检测股票代码是否都包含在回测数据中，当有一只股票的某一个回测数据全是nan时，则认为有股票代码没有全部包含在回测数据中
-        assert not self.bkt_data.stock_price.isnull().all(1).any().any(), \
+        # 检测股票代码是否都包含在回测数据中，当有一只股票的某一个回测数据全是nan，且对这只股票有持仓时，
+        # 则认为有股票代码没有全部包含在回测数据中
+        stock_in_condition = np.logical_and(self.bkt_data.stock_price.isnull().all(1).any(1),
+                                            self.bkt_position.holding_matrix.sum()>0)
+        assert not stock_in_condition.any(), \
                'Some stocks in the input holding matrix are NOT included in the backtest database, '\
                'please check it carefully!\n'
         # 检测回测数据是否覆盖了回测时间段
@@ -334,8 +337,10 @@ class backtest(object):
     # 利用回测得到的数据进行业绩归因
     def get_performance_attribution(self, *, benchmark_position='default', outside_bb='Empty', discard_factor=[],
                                     show_warning=True):
-        self.bkt_pa = performance_attribution(self.real_pct_position, benchmark_position=benchmark_position,
-                                              portfolio_returns=self.bkt_performance.cum_log_return)
+#        self.bkt_pa = performance_attribution(self.real_pct_position, benchmark_position=benchmark_position,
+#                                              portfolio_returns=self.bkt_performance.log_return)
+        self.bkt_pa = performance_attribution(self.tar_pct_position, benchmark_position=benchmark_position,
+                                              )
         self.bkt_pa.execute_performance_attribution(outside_bb=outside_bb, discard_factor=discard_factor,
                                                     show_warning=show_warning)
         self.bkt_pa.plot_performance_attribution()
@@ -369,7 +374,7 @@ class backtest(object):
 
     # 重置benchmark，需要观察一个策略相对不同benchmark的变化时用到，包括改变股票池后，benchmark应当换成对应的股票池
     def reset_bkt_benchmark(self, new_bkt_benchmark_data):
-        self.bkt_data.benchmark_price = data.read_data([new_bkt_benchmark_data], [new_bkt_benchmark_data])
+        self.bkt_data.benchmark_price = data.read_data(new_bkt_benchmark_data, ['ClosePrice','OpenPrice'])
 
         # 将benchmark price数据期调整为回测期
         self.bkt_data.benchmark_price = data.align_index(self.tar_pct_position.holding_matrix,
