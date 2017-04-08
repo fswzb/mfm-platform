@@ -88,12 +88,13 @@ class single_factor_strategy(strategy):
         else:
             # 有股票池的情况去除不可投资的股票
             self.filter_uninv()
-        # 设置为等权重
+        # 设置为等权重        
         self.position.to_percentage()
         # 如果需要市值加权，则市值加权
         if weight == 1:
             self.position.weighted_holding(self.strategy_data.stock_price.ix['FreeMarketValue',
                                            self.position.holding_matrix.index, :])
+        pass
     
     # 单因子的因子收益率计算和检验，用来判断因子有效性，
     # holding_freq为回归收益的频率，默认为月，可调整为与调仓周期一样，也可不同
@@ -340,29 +341,45 @@ class single_factor_strategy(strategy):
 
     # 根据一个股票池进行一次完整的单因子测试的函数
     def single_factor_test(self, *, factor, direction='+', bkt_obj='Empty', bb_obj='Empty', pa_benchmark_position='default',
-                           discard_factor=[], bkt_start='default', bkt_end='default'):
+                           discard_factor=[], bkt_start='default', bkt_end='default', stock_pool='all'):
         # 如果传入的是str，则读取同名文件，如果是dataframe，则直接传入因子
         if type(factor) == str:
             self.read_factor_data([factor], [factor], shift=True)
         elif self.strategy_data.factor.empty:
             self.strategy_data.factor = pd.Panel({'factor_one':factor})
         else:
-            self.strategy_data.factor[0] = factor
+            self.strategy_data.factor.iloc[0] = factor
 
         # 生成调仓日
         if self.holding_days.empty:
             self.generate_holding_days()
+        # 初始化持仓或重置策略持仓
+        if self.position.holding_matrix.empty:
+            self.initialize_position(self.strategy_data.factor.ix[0, self.holding_days, :])
+        else:
+            self.reset_position()
+
+        # 将策略的股票池设置为当前股票池
+        self.strategy_data.stock_pool = stock_pool
         # 根据股票池生成标记
         self.strategy_data.handle_stock_pool(shift=True)
         # 除去不可交易或不可投资的数据
+        # 注意，对策略数据的修改是永久性的，无法恢复，因此在使用过某个股票池的单因子测试后，对策略数据的再使用要谨慎
         if self.strategy_data.stock_pool == 'all':
             self.strategy_data.discard_untradable_data()
         else:
             self.strategy_data.discard_uninv_data()
-        # 初始化持仓
-        if self.position.holding_matrix.empty:
-            self.initialize_position(self.strategy_data.factor.ix[0, self.holding_days, :])
-        
+
+        # 如果有传入的bb对象
+        if bb_obj == 'Empty':
+            pass
+        else:
+            # 将bb的股票池改为当前股票池
+            bb_obj.bb_data.stock_pool = stock_pool
+            # 根据股票池生成标记，注意：股票池数据不需要shift，因为这里的barrabase数据是用来事后归因的，不涉及策略构成
+            bb_obj.bb_data.handle_stock_pool(shift=False)
+
+
         # 简单分位数选股
         self.select_stocks(weight=1, direction=direction)
 
@@ -371,10 +388,15 @@ class single_factor_strategy(strategy):
             bkt_obj = backtest(self.position, bkt_start=bkt_start, bkt_end=bkt_end)
         else:
             bkt_obj.reset_bkt_position(self.position)
+        # 将回测的基准改为当前的股票池，若为all，则用默认的基准值
+        if stock_pool != 'all':
+            bkt_obj.reset_bkt_benchmark(['ClosePrice_' + stock_pool, 'OpenPrice_' + stock_pool])
+
         # 回测、画图、归因
         bkt_obj.execute_backtest()
         bkt_obj.get_performance()
-        bkt_obj.get_performance_attribution(outside_bb=bb_obj, benchmark_position=pa_benchmark_position,
+        # 注意bb obj进行了一份深拷贝，这是因为在业绩归因的计算中，会根据不同的股票池丢弃数据，导致数据不全，因此不能传引用
+        bkt_obj.get_performance_attribution(outside_bb=copy.deepcopy(bb_obj), benchmark_position=pa_benchmark_position,
                                             discard_factor=discard_factor, show_warning=False)
         # 画单因子组合收益率
         self.get_factor_return(weights=np.sqrt(self.strategy_data.stock_price.ix['FreeMarketValue']),
@@ -401,32 +423,20 @@ class single_factor_strategy(strategy):
         # 先要初始化bkt对象
         bkt_obj = backtest(self.position, bkt_start=bkt_start, bkt_end=bkt_end)
         # 建立bb对象，否则之后每次循环都要建立一次新的bb对象
-        if bb_obj == 'Empty':
-            bb_obj = barra_base()
-            bb_obj.construct_barra_base()
-        # 外部传入的bb对象，要检测其股票池是否为all，如果不是all，则输出警告，因为可能丢失了数据
-        elif bb_obj.bb_data.stock_pool != 'all':
-            print('The stockpool of the barra_base obj from outside is NOT "all", be aware of possibile'
-                  'data loss due to this situation!\n')
+#        if bb_obj == 'Empty':
+#            bb_obj = barra_base()
+#            bb_obj.construct_barra_base()
+#        # 外部传入的bb对象，要检测其股票池是否为all，如果不是all，则输出警告，因为可能丢失了数据
+#        elif bb_obj.bb_data.stock_pool != 'all':
+#            print('The stockpool of the barra_base obj from outside is NOT "all", be aware of possibile'
+#                  'data loss due to this situation!\n')
 
         # 根据股票池进行循环
         for stock_pool in stock_pools:
-            # 将回测的基准改为当前的股票池，若为all，则用默认的基准值
-            if stock_pool != 'all':
-                bkt_obj.reset_bkt_benchmark(['ClosePrice_'+stock_pool, 'OpenPrice_'+stock_pool])
-            # 重置策略持仓
-            self.reset_position()
-            # 将策略的股票池设置为当前股票池
-            self.strategy_data.stock_pool = stock_pool
-            # 将bb的股票池改为当前股票池
-            bb_obj.bb_data.stock_pool = stock_pool
-            # 根据股票池生成标记，注意：股票池数据不需要shift，因为这里的barrabase数据是用来事后归因的，不涉及策略构成
-            bb_obj.bb_data.handle_stock_pool(shift=False)
-
             # 进行当前股票池下的单因子测试
-            # 注意bb obj进行了一份深拷贝，这是因为在业绩归因的计算中，会根据不同的股票池丢弃数据，导致数据不全，因此不能传引用
-            self.single_factor_test(factor=factor, direction=direction, bkt_obj=bkt_obj, bb_obj=copy.deepcopy(bb_obj),
-                                    discard_factor=discard_factor, bkt_start=bkt_start, bkt_end=bkt_end)
+            self.single_factor_test(factor=factor, direction=direction, bkt_obj=bkt_obj, bb_obj=bb_obj,
+                                    discard_factor=discard_factor, bkt_start=bkt_start, bkt_end=bkt_end,
+                                    stock_pool=stock_pool)
 
 
 

@@ -276,8 +276,8 @@ class backtest(object):
         projected_pct = curr_tar_pct_holding.ix[tradable] / (curr_tar_pct_holding.ix[tradable]).sum()
                 
         # 计算预计买入的量，注意这里依然不计算交易费用
-        projected_vol = np.floor(curr_cash_available * projected_pct / \
-                                 (self.bkt_data.stock_price.ix['OpenPrice_adj', cursor, tradable] *100))
+        projected_vol = np.floor(pd.to_numeric(curr_cash_available * projected_pct /
+                                 (self.bkt_data.stock_price.ix['OpenPrice_adj', cursor, tradable] *100)))
         
         # 预计的当期新持仓量向量，注意这里与上面的不同在于这里包含所有股票的代码
         proj_vol_holding = self.real_vol_position.holding_matrix.ix[cursor-1, :]

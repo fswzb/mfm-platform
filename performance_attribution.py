@@ -186,7 +186,14 @@ class performance_attribution(object):
 
         # 第三张图分解组合的累计行业收益
         # 行业图示只给出最大和最小的5个行业
-        qualified_rank = [1,2,3,4,5,28,27,26,25,24]
+        # 当前的有效行业数
+        valid_indus = self.pa_returns.iloc[:, 10:38].dropna(axis=1, how='all').shape[1]
+        if valid_indus<=10:
+            qualified_rank = [i for i in range(1, valid_indus+1)]
+        else:
+            part1 = [i for i in range(1, 6)]
+            part2 = [j for j in range(valid_indus, valid_indus-5, -1)]
+            qualified_rank = part1+part2
         f3 = plt.figure()
         ax3 = f3.add_subplot(1, 1, 1)
         indus_rank = self.port_pa_returns.ix[:, 10:38].cumsum(0).ix[-1].rank(ascending=False)

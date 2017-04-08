@@ -51,7 +51,10 @@ class strategy_data(data):
         # 若不在，则读取weight数据，文件名即为stock_pool
         else:
             temp_weights = data.read_data(['Weight_'+self.stock_pool],['Weight_'+self.stock_pool])
-            self.benchmark_price['Weight_'+self.stock_pool] = temp_weights['Weight_'+self.stock_pool]
+            if self.benchmark_price.empty:
+                self.benchmark_price = temp_weights
+            else:
+                self.benchmark_price['Weight_'+self.stock_pool] = temp_weights['Weight_'+self.stock_pool]
             self.if_tradable['if_inpool'] = self.benchmark_price.ix['Weight_'+self.stock_pool]>0
 
         if shift:
@@ -292,23 +295,37 @@ class strategy_data(data):
             return np.empty(x.shape[1])*np.nan
         y = yx.ix[:, 0]
         x = yx.ix[:, 1:]
-        
+
+        # 设置行业因子收益限制条件，行业因子暴露为x中的第 11 列到第 38 列
+        # 行业因子的限制权重，循环在行业因子中求和
+        final_weight = pd.Series(np.arange(28) * 0, index=x.columns[10:38])
+        for cursor in range(10, 38):
+            final_weight.iloc[cursor - 10] = (indus_ret_weights * x.ix[:, cursor]).sum()
+        final_weight = final_weight / (final_weight.sum())
+
+        # 储存结果的series
+        results_s = pd.Series(np.nan, index=x.columns)
+
+        # 移除被删除的风格因子，或股票池中不包含的行业因子
+        # 首先，x中暴露全为0的因子，一定是要被删除的
+        x = x.replace(0, np.nan).dropna(axis=1, how='all').fillna(0.0)
+        # 判断行业因子中有多少要被移除的，只需要看final_weight中有多少权重是0
+        final_weight = final_weight.replace(0, np.nan).dropna()
+        num_valid_all = x.shape[1]
+        num_valid_indus = final_weight.shape[0]
+        num_valid_style = num_valid_all - num_valid_indus - 1
+
+        # 设置行业因子收益的加权求和限制为0
+        indus_cons = pd.Series(np.arange(num_valid_all) * 0)
+        # 系数的第11到38项设置为行业因子收益的权重，注意如果有被移除的行业因子，则需要对应调整
+        indus_cons.iloc[num_valid_style:num_valid_all-1] = final_weight.values
+
         # 开始设置优化
         # P = X.T dot X
         P = matrix(np.dot(x.as_matrix().transpose(), x.as_matrix()))
         # q = - (X.T dot Y)
         q = matrix(-np.dot(x.as_matrix().transpose(), y.as_matrix()))
-        
-        # 设置行业因子收益限制条件，行业因子暴露为x中的第 11 列到第 38 列
-        # 行业因子的限制权重，循环在行业因子中求和
-        final_weight = pd.Series(np.arange(28)*0)
-        for cursor in range(10,38):
-            final_weight.ix[cursor-10] = (indus_ret_weights*x.ix[:, cursor]).sum()
-        final_weight = final_weight/(final_weight.sum())
-        # 设置行业因子收益的加权求和限制为0
-        indus_cons = pd.Series(np.arange(39)*0)
-        # 系数的第11到38项设置为行业因子收益的权重
-        indus_cons.ix[10:37] = final_weight.values
+
         # 设置限制条件
         A = matrix(indus_cons.as_matrix(), (1, indus_cons.size))
         b = matrix(0.0)
@@ -320,10 +337,15 @@ class strategy_data(data):
         # 将数据类型改为(n,)的ndarray
         results_np = np.array(results['x']).squeeze()
 
+        # 将结果对应到相应的因子上，构成结果的series
+        results_s[x.columns] = results_np
+        # 不存在的因子收益，可以认为它的收益是0
+        results_s = results_s.fillna(0)
+
         # 计算残差
         residuals = y - x.dot(results_np)
         
-        return [results_np, residuals]
+        return [results_s, residuals]
         
         
         
