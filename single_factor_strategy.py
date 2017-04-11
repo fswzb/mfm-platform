@@ -209,12 +209,20 @@ class single_factor_strategy(strategy):
             self.factor_return_series = -self.factor_return_series
             self.t_stats_series = -self.t_stats_series
 
+        # 输出的string
+        tstats_sig_ratio = self.t_stats_series[np.abs(self.t_stats_series) >= 2].size / self.t_stats_series.size
+        target_str = 'The average return of this factor: {0:.4f}%\n' \
+                     'Note that the return of factor is not annualized but corresponding to the holding days interval\n' \
+                     'The average t-statistics value: {1:.4f}\n' \
+                     'Ratio of t_stats whose absolute value >= 2: {2:.2f}%\n'.format(
+            self.factor_return_series.mean()*100, self.t_stats_series.mean(), tstats_sig_ratio*100
+        )
+
         # 循环结束，输出结果
-        print('The average return of this factor: %f%%\n' % (self.factor_return_series.mean()*100))
-        print('Note that the return of factor is not annualized but corresponding to the holding days interval\n')
-        print('The average t-statistics value: %f\n' % (self.t_stats_series.mean()))
-        tstats_sig_ratio = self.t_stats_series[np.abs(self.t_stats_series)>=2].size / self.t_stats_series.size
-        print('Ratio of t-stats whose absolute value >= 2: %f\n' % (tstats_sig_ratio))
+        print(target_str)
+        with open(str(os.path.abspath('.'))+'/'+self.strategy_data.stock_pool+'/performance.txt',
+                  'a', encoding='GB18030') as text_file:
+            text_file.write(target_str)
 
         # 画图，默认画因子收益的累计收益图
         fx = plt.figure()
@@ -278,7 +286,11 @@ class single_factor_strategy(strategy):
             
         # 循环结束
         # 输出结果
-        print('The average IC of this factor: %f\n' % (self.ic_series.mean()))
+        target_str = 'The average IC of this factor: {0:.4f}\n'.format(self.ic_series.mean())
+        print(target_str)
+        with open(str(os.path.abspath('.'))+'/'+self.strategy_data.stock_pool+'/performance.txt',
+                  'a', encoding='GB18030') as text_file:
+            text_file.write(target_str)
         
         # 画图
         fx = plt.figure()
@@ -492,8 +504,7 @@ class single_factor_strategy(strategy):
         bkt_obj.execute_backtest()
         bkt_obj.get_performance(foldername=stock_pool)
         if do_pa:
-            # 注意bb obj进行了一份深拷贝，这是因为在业绩归因的计算中，会根据不同的股票池丢弃数据，导致数据不全，因此不能传引用
-            bkt_obj.get_performance_attribution(outside_bb=copy.deepcopy(bb_obj), benchmark_position=pa_benchmark_position,
+            bkt_obj.get_performance_attribution(outside_bb=bb_obj, benchmark_position=pa_benchmark_position,
                                                 discard_factor=discard_factor, show_warning=False, foldername=stock_pool)
 
         # 行业内选股

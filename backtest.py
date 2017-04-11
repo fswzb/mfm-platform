@@ -331,7 +331,7 @@ class backtest(object):
         self.initialize_performance()
         
         # 计算和输出业绩指标
-        self.bkt_performance.get_performance()
+        self.bkt_performance.get_performance(foldername=foldername, filename=filename)
         # 画图
         self.bkt_performance.plot_performance(foldername=foldername, filename=filename)
 
@@ -345,7 +345,8 @@ class backtest(object):
             self.bkt_pa = performance_attribution(self.tar_pct_position, benchmark_position=benchmark_position,
                                                   )
         self.bkt_pa.execute_performance_attribution(outside_bb=outside_bb, discard_factor=discard_factor,
-                                                    show_warning=show_warning)
+                                                    show_warning=show_warning, foldername=foldername, 
+                                                    filename=filename)
         self.bkt_pa.plot_performance_attribution(foldername=foldername, filename=filename)
 
     # 重置回测每次执行回测要改变的数据，若想不创建新回测对象而改变回测参数，则需重置这些数据后才能再次执行回测

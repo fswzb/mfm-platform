@@ -128,7 +128,7 @@ class performance(object):
                self.excess_return.size
         
     # 计算并输出各个指标
-    def get_performance(self):
+    def get_performance(self, *, foldername='', filename=''):
         
         annual_r = performance.annual_return(self.cum_log_return, self.tradedays_one_year)
         annual_std = performance.annual_std(self.log_return, self.tradedays_one_year)
@@ -138,21 +138,31 @@ class performance(object):
         annual_ex_std = self.annual_excess_std()
         annual_info_ratio = self.info_ratio(annual_ex_r, annual_ex_std)
         win_ratio = self.win_ratio()
-        
+
         # 输出指标
-        print('Stats START ------------------------------------------------------------------------')
-        print('The stats of the strategy (and its performance agianst benchmark) is as follows: ')
-        print('Annual log return: %f%%' % (annual_r*100))
-        print('Annual standard deviation of log return: %f%%' % (annual_std*100))
-        print('Annual Sharpe ratio: %f' % (annual_sharpe))
-        print('Max Drawdown: %f%%' % (max_dd*100))
-        print('Max Drawdown happened between %s and %s' % (self.cum_log_return.index[peak_loc], 
-                                                           self.cum_log_return.index[low_loc]))
-        print('Annual excess log return: %f%%' % (annual_ex_r*100))
-        print('Annual standard deviation of excess log return: %f%%' % (annual_ex_std*100))
-        print('Annual information ratio: %f' % (annual_info_ratio))
-        print('Winning ratio: %f%%' % (win_ratio*100))
-        print('Stats END --------------------------------------------------------------------------\n')
+        target_str = 'Stats START ------------------------------------------------------------------------\n' \
+                     'The stats of the strategy (and its performance agianst benchmark) is as follows:\n' \
+                     'Annual log return: {0:.2f}%\n' \
+                     'Annual standard deviation of log return: {1:.2f}%\n' \
+                     'Anuual Sharpe ratio: {2:.2f}\n' \
+                     'Max Drawdown: {3:.2f}%\n' \
+                     'Max Drawdown happened between {4} and {5}\n' \
+                     'Anuual excess log return: {6:.2f}%\n' \
+                     'Anuual standard deviation of excess log return: {7:.2f}%\n' \
+                     'Anuual information ratio: {8:.2f}\n' \
+                     'Winning ratio: {9:.2f}%\n' \
+                     'Stats END --------------------------------------------------------------------------\n'.format(
+            annual_r*100, annual_std*100, annual_sharpe, max_dd*100, self.cum_log_return.index[peak_loc],
+            self.cum_log_return.index[low_loc], annual_ex_r*100, annual_ex_std*100, annual_info_ratio, win_ratio*100
+        )
+
+        print(target_str)
+
+        # 将输出写到txt中
+        with open(str(os.path.abspath('.'))+'/'+foldername+'/'+filename+'performance.txt',
+                  'w', encoding='GB18030') as text_file:
+            text_file.write(target_str)
+
 
     # 画图
     def plot_performance(self, *, foldername='', filename=''):

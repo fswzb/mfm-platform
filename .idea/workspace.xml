@@ -58,9 +58,18 @@
             <entry file="file://$PROJECT_DIR$/backtest.py">
               <provider selected="true" editor-type-id="text-editor">
                 <state relative-caret-position="5040">
-                  <caret line="347" column="78" lean-forward="false" selection-start-line="347" selection-start-column="78" selection-end-line="347" selection-end-column="78" />
+                  <caret line="348" column="70" lean-forward="false" selection-start-line="348" selection-start-column="70" selection-end-line="348" selection-end-column="70" />
                   <folding>
                     <element signature="e#112#130#0" expanded="true" />
+                    <marker date="1491901641000" expanded="true" signature="498:19699" ph="..." />
+                    <marker date="1491901641000" expanded="true" signature="16499:16781" ph="..." />
+                    <marker date="1491901641000" expanded="true" signature="17032:17821" ph="..." />
+                    <marker date="1491901641000" expanded="true" signature="17058:17272" ph="..." />
+                    <marker date="1491901641000" expanded="true" signature="17911:18391" ph="..." />
+                    <marker date="1491901641000" expanded="true" signature="17945:18391" ph="..." />
+                    <marker date="1491901641000" expanded="true" signature="18397:18508" ph="..." />
+                    <marker date="1491901641000" expanded="true" signature="18560:19175" ph="..." />
+                    <marker date="1491901641000" expanded="true" signature="19310:19699" ph="..." />
                   </folding>
                 </state>
               </provider>
@@ -69,8 +78,8 @@
           <file leaf-file-name="performance_attribution.py" pinned="false" current-in-tab="false">
             <entry file="file://$PROJECT_DIR$/performance_attribution.py">
               <provider selected="true" editor-type-id="text-editor">
-                <state relative-caret-position="1120">
-                  <caret line="265" column="107" lean-forward="false" selection-start-line="265" selection-start-column="107" selection-end-line="265" selection-end-column="107" />
+                <state relative-caret-position="1195">
+                  <caret line="270" column="107" lean-forward="false" selection-start-line="270" selection-start-column="107" selection-end-line="270" selection-end-column="107" />
                   <folding />
                 </state>
               </provider>
@@ -91,8 +100,8 @@
           <file leaf-file-name="single_factor_strategy.py" pinned="false" current-in-tab="false">
             <entry file="file://$PROJECT_DIR$/single_factor_strategy.py">
               <provider selected="true" editor-type-id="text-editor">
-                <state relative-caret-position="715">
-                  <caret line="505" column="75" lean-forward="false" selection-start-line="505" selection-start-column="75" selection-end-line="505" selection-end-column="75" />
+                <state relative-caret-position="522">
+                  <caret line="472" column="41" lean-forward="false" selection-start-line="472" selection-start-column="41" selection-end-line="472" selection-end-column="41" />
                   <folding>
                     <element signature="e#112#130#0" expanded="true" />
                   </folding>
@@ -103,8 +112,8 @@
           <file leaf-file-name="sf_strategy_test.py" pinned="false" current-in-tab="true">
             <entry file="file://$PROJECT_DIR$/sf_strategy_test.py">
               <provider selected="true" editor-type-id="text-editor">
-                <state relative-caret-position="708">
-                  <caret line="59" column="76" lean-forward="false" selection-start-line="59" selection-start-column="76" selection-end-line="59" selection-end-column="76" />
+                <state relative-caret-position="495">
+                  <caret line="52" column="51" lean-forward="true" selection-start-line="52" selection-start-column="51" selection-end-line="52" selection-end-column="51" />
                   <folding>
                     <element signature="e#113#131#0" expanded="true" />
                   </folding>
@@ -148,8 +157,8 @@
           <file leaf-file-name="single_factor_strategy.py" pinned="false" current-in-tab="true">
             <entry file="file://$PROJECT_DIR$/single_factor_strategy.py">
               <provider selected="true" editor-type-id="text-editor">
-                <state relative-caret-position="329">
-                  <caret line="471" column="26" lean-forward="true" selection-start-line="471" selection-start-column="26" selection-end-line="471" selection-end-column="26" />
+                <state relative-caret-position="380">
+                  <caret line="213" column="21" lean-forward="false" selection-start-line="213" selection-start-column="21" selection-end-line="213" selection-end-column="21" />
                   <folding>
                     <element signature="e#112#130#0" expanded="true" />
                   </folding>
@@ -160,8 +169,8 @@
           <file leaf-file-name="barra_base.py" pinned="false" current-in-tab="false">
             <entry file="file://$PROJECT_DIR$/barra_base.py">
               <provider selected="true" editor-type-id="text-editor">
-                <state relative-caret-position="581">
-                  <caret line="232" column="24" lean-forward="false" selection-start-line="232" selection-start-column="24" selection-end-line="232" selection-end-column="24" />
+                <state relative-caret-position="483">
+                  <caret line="201" column="37" lean-forward="false" selection-start-line="201" selection-start-column="11" selection-end-line="201" selection-end-column="37" />
                   <folding>
                     <marker date="1491790153000" expanded="true" signature="17548:17557" ph="..." />
                     <marker date="1491790153000" expanded="true" signature="30518:31559" ph="..." />
@@ -174,8 +183,8 @@
           <file leaf-file-name="backtest.py" pinned="false" current-in-tab="false">
             <entry file="file://$PROJECT_DIR$/backtest.py">
               <provider selected="true" editor-type-id="text-editor">
-                <state relative-caret-position="394">
-                  <caret line="339" column="83" lean-forward="false" selection-start-line="339" selection-start-column="83" selection-end-line="339" selection-end-column="83" />
+                <state relative-caret-position="508">
+                  <caret line="333" column="86" lean-forward="false" selection-start-line="333" selection-start-column="86" selection-end-line="333" selection-end-column="86" />
                   <folding>
                     <element signature="e#112#130#0" expanded="true" />
                   </folding>
@@ -186,8 +195,8 @@
           <file leaf-file-name="performance_attribution.py" pinned="false" current-in-tab="false">
             <entry file="file://$PROJECT_DIR$/performance_attribution.py">
               <provider selected="true" editor-type-id="text-editor">
-                <state relative-caret-position="446">
-                  <caret line="67" column="30" lean-forward="false" selection-start-line="67" selection-start-column="30" selection-end-line="67" selection-end-column="30" />
+                <state relative-caret-position="581">
+                  <caret line="161" column="56" lean-forward="false" selection-start-line="161" selection-start-column="56" selection-end-line="161" selection-end-column="56" />
                   <folding />
                 </state>
               </provider>
@@ -196,9 +205,11 @@
           <file leaf-file-name="performance.py" pinned="false" current-in-tab="false">
             <entry file="file://$PROJECT_DIR$/performance.py">
               <provider selected="true" editor-type-id="text-editor">
-                <state relative-caret-position="588">
-                  <caret line="188" column="41" lean-forward="false" selection-start-line="188" selection-start-column="41" selection-end-line="188" selection-end-column="41" />
-                  <folding />
+                <state relative-caret-position="521">
+                  <caret line="160" column="19" lean-forward="false" selection-start-line="160" selection-start-column="19" selection-end-line="160" selection-end-column="19" />
+                  <folding>
+                    <element signature="e#112#130#0" expanded="true" />
+                  </folding>
                 </state>
               </provider>
             </entry>
@@ -206,8 +217,8 @@
           <file leaf-file-name="strategy_data.py" pinned="false" current-in-tab="false">
             <entry file="file://$PROJECT_DIR$/strategy_data.py">
               <provider selected="true" editor-type-id="text-editor">
-                <state relative-caret-position="424">
-                  <caret line="143" column="33" lean-forward="false" selection-start-line="143" selection-start-column="33" selection-end-line="143" selection-end-column="33" />
+                <state relative-caret-position="433">
+                  <caret line="248" column="24" lean-forward="false" selection-start-line="248" selection-start-column="24" selection-end-line="248" selection-end-column="24" />
                   <folding>
                     <element signature="e#112#130#0" expanded="true" />
                   </folding>
@@ -279,11 +290,11 @@
         <option value="$PROJECT_DIR$/database.py" />
         <option value="$PROJECT_DIR$/barra_base.py" />
         <option value="$PROJECT_DIR$/strategy_data.py" />
+        <option value="$PROJECT_DIR$/position.py" />
         <option value="$PROJECT_DIR$/performance.py" />
         <option value="$PROJECT_DIR$/backtest.py" />
-        <option value="$PROJECT_DIR$/performance_attribution.py" />
-        <option value="$PROJECT_DIR$/position.py" />
         <option value="$PROJECT_DIR$/single_factor_strategy.py" />
+        <option value="$PROJECT_DIR$/performance_attribution.py" />
         <option value="$PROJECT_DIR$/sf_strategy_test.py" />
       </list>
     </option>
@@ -295,7 +306,7 @@
     <option name="height" value="1080" />
   </component>
   <component name="ProjectView">
-    <navigator proportions="" version="1">
+    <navigator currentView="ProjectPane" proportions="" version="1">
       <flattenPackages />
       <showMembers />
       <showModules />
@@ -308,7 +319,11 @@
       <manualOrder />
       <foldersAlwaysOnTop value="true" />
     </navigator>
-    <panes />
+    <panes>
+      <pane id="Scratches" />
+      <pane id="Scope" />
+      <pane id="ProjectPane" />
+    </panes>
   </component>
   <component name="PropertiesComponent">
     <property name="last_opened_file_path" value="$PROJECT_DIR$" />
@@ -555,7 +570,7 @@
     <frame x="-480" y="-1080" width="1920" height="1080" extended-state="0" />
     <editor active="true" />
     <layout>
-      <window_info id="Project" active="false" anchor="left" auto_hide="false" internal_type="DOCKED" type="DOCKED" visible="false" show_stripe_button="true" weight="0.1875" sideWeight="0.5" order="1" side_tool="false" content_ui="combo" />
+      <window_info id="Project" active="false" anchor="left" auto_hide="false" internal_type="DOCKED" type="DOCKED" visible="false" show_stripe_button="true" weight="0.18746708" sideWeight="0.5" order="1" side_tool="false" content_ui="combo" />
       <window_info id="TODO" active="false" anchor="bottom" auto_hide="false" internal_type="DOCKED" type="DOCKED" visible="false" show_stripe_button="true" weight="0.32970297" sideWeight="0.5" order="10" side_tool="false" content_ui="tabs" />
       <window_info id="Event Log" active="false" anchor="bottom" auto_hide="false" internal_type="DOCKED" type="DOCKED" visible="false" show_stripe_button="true" weight="0.3880422" sideWeight="0.50208336" order="0" side_tool="true" content_ui="tabs" />
       <window_info id="Run" active="false" anchor="bottom" auto_hide="false" internal_type="DOCKED" type="DOCKED" visible="false" show_stripe_button="true" weight="0.27128714" sideWeight="0.5" order="6" side_tool="false" content_ui="tabs" />
@@ -1035,28 +1050,21 @@
         </state>
       </provider>
     </entry>
-    <entry file="file://$PROJECT_DIR$/performance.py">
-      <provider selected="true" editor-type-id="text-editor">
-        <state relative-caret-position="588">
-          <caret line="188" column="41" lean-forward="false" selection-start-line="188" selection-start-column="41" selection-end-line="188" selection-end-column="41" />
-          <folding />
-        </state>
-      </provider>
-    </entry>
-    <entry file="file://$PROJECT_DIR$/performance_attribution.py">
-      <provider selected="true" editor-type-id="text-editor">
-        <state relative-caret-position="1120">
-          <caret line="265" column="107" lean-forward="false" selection-start-line="265" selection-start-column="107" selection-end-line="265" selection-end-column="107" />
-          <folding />
-        </state>
-      </provider>
-    </entry>
     <entry file="file://$PROJECT_DIR$/backtest.py">
       <provider selected="true" editor-type-id="text-editor">
         <state relative-caret-position="5040">
-          <caret line="347" column="78" lean-forward="false" selection-start-line="347" selection-start-column="78" selection-end-line="347" selection-end-column="78" />
+          <caret line="348" column="70" lean-forward="false" selection-start-line="348" selection-start-column="70" selection-end-line="348" selection-end-column="70" />
           <folding>
             <element signature="e#112#130#0" expanded="true" />
+            <marker date="1491901641000" expanded="true" signature="498:19699" ph="..." />
+            <marker date="1491901641000" expanded="true" signature="16499:16781" ph="..." />
+            <marker date="1491901641000" expanded="true" signature="17032:17821" ph="..." />
+            <marker date="1491901641000" expanded="true" signature="17058:17272" ph="..." />
+            <marker date="1491901641000" expanded="true" signature="17911:18391" ph="..." />
+            <marker date="1491901641000" expanded="true" signature="17945:18391" ph="..." />
+            <marker date="1491901641000" expanded="true" signature="18397:18508" ph="..." />
+            <marker date="1491901641000" expanded="true" signature="18560:19175" ph="..." />
+            <marker date="1491901641000" expanded="true" signature="19310:19699" ph="..." />
           </folding>
         </state>
       </provider>
@@ -1073,10 +1081,28 @@
         </state>
       </provider>
     </entry>
+    <entry file="file://$PROJECT_DIR$/performance.py">
+      <provider selected="true" editor-type-id="text-editor">
+        <state relative-caret-position="521">
+          <caret line="160" column="19" lean-forward="false" selection-start-line="160" selection-start-column="19" selection-end-line="160" selection-end-column="19" />
+          <folding>
+            <element signature="e#112#130#0" expanded="true" />
+          </folding>
+        </state>
+      </provider>
+    </entry>
+    <entry file="file://$PROJECT_DIR$/performance_attribution.py">
+      <provider selected="true" editor-type-id="text-editor">
+        <state relative-caret-position="1195">
+          <caret line="270" column="107" lean-forward="false" selection-start-line="270" selection-start-column="107" selection-end-line="270" selection-end-column="107" />
+          <folding />
+        </state>
+      </provider>
+    </entry>
     <entry file="file://$PROJECT_DIR$/single_factor_strategy.py">
       <provider selected="true" editor-type-id="text-editor">
-        <state relative-caret-position="715">
-          <caret line="505" column="75" lean-forward="false" selection-start-line="505" selection-start-column="75" selection-end-line="505" selection-end-column="75" />
+        <state relative-caret-position="522">
+          <caret line="472" column="41" lean-forward="false" selection-start-line="472" selection-start-column="41" selection-end-line="472" selection-end-column="41" />
           <folding>
             <element signature="e#112#130#0" expanded="true" />
           </folding>
@@ -1085,8 +1111,8 @@
     </entry>
     <entry file="file://$PROJECT_DIR$/sf_strategy_test.py">
       <provider selected="true" editor-type-id="text-editor">
-        <state relative-caret-position="708">
-          <caret line="59" column="76" lean-forward="false" selection-start-line="59" selection-start-column="76" selection-end-line="59" selection-end-column="76" />
+        <state relative-caret-position="495">
+          <caret line="52" column="51" lean-forward="true" selection-start-line="52" selection-start-column="51" selection-end-line="52" selection-end-column="51" />
           <folding>
             <element signature="e#113#131#0" expanded="true" />
           </folding>

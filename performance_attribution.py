@@ -126,7 +126,7 @@ class performance_attribution(object):
     # 注意，此类股票的出现必然导致归因的不准确，因为它们归入到了组合总收益中，但不会被归入到缺少暴露值的因子收益中，因此进入到残余收益中
     # 这样不仅会使得残余收益含入因子收益，而且使得残余收益与因子收益之间具有显著相关性
     # 如果这样暴露缺失的股票比例很大，则使得归因不具有参考价值
-    def handle_discarded_stocks(self, *, show_warning=True):
+    def handle_discarded_stocks(self, *, show_warning=True, foldername='', filename=''):
         self.discarded_stocks_num = self.pa_returns.mul(0)
         self.discarded_stocks_wgt = self.pa_returns.mul(0)
         # 因子暴露有缺失值，没有参与归因的股票
@@ -153,9 +153,14 @@ class performance_attribution(object):
                           'discarded_stocks_wgt for more information.\n'.format(time, temp_data.ix['total'],
                                                                                 self.discarded_stocks_wgt.ix[time, 'total']))
         # 输出总的缺失情况：
-        print('The average number of stocks(*discarded times) held but discarded in the pa is: {0}, the weight of these '
-              'stocks(*discarded times) is: {1}.\n'.format(self.discarded_stocks_num['total'].mean(),
-                                                           self.discarded_stocks_wgt['total'].mean()))
+        target_str = 'The average number of stocks(*discarded times) held but discarded in the pa is: {0}, \n' \
+                     'the weight of these stocks(*discarded times) is: {1}.\n'.format(
+                             self.discarded_stocks_num['total'].mean(), self.discarded_stocks_wgt['total'].mean())
+        print(target_str)
+        # 将输出写到txt中
+        with open(str(os.path.abspath('.'))+'/'+foldername+'/'+filename+'performance.txt',
+                  'a', encoding='GB18030') as text_file:
+            text_file.write(target_str)
 
     # 进行画图
     def plot_performance_attribution(self, *, foldername='', filename=''):
@@ -263,11 +268,12 @@ class performance_attribution(object):
         plt.savefig(str(os.path.abspath('.'))+'/'+foldername+'/'+filename+'PA_ExpoIndus.png')
 
     # 进行业绩归因
-    def execute_performance_attribution(self, *, outside_bb='Empty', discard_factor=[], show_warning=True):
+    def execute_performance_attribution(self, *, outside_bb='Empty', discard_factor=[], show_warning=True, 
+                                        foldername='', filename=''):
         self.construnct_bb(outside_bb=outside_bb)
         self.get_pa_return(discard_factor=discard_factor)
         self.analyze_pa_outcome()
-        self.handle_discarded_stocks(show_warning=show_warning)
+        self.handle_discarded_stocks(show_warning=show_warning, foldername=foldername, filename=filename)
 
 
 
