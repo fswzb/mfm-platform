@@ -280,8 +280,9 @@ class backtest(object):
                                  (self.bkt_data.stock_price.ix['OpenPrice_adj', cursor, tradable] *100)))
         
         # 预计的当期新持仓量向量，注意这里与上面的不同在于这里包含所有股票的代码
-        proj_vol_holding = self.real_vol_position.holding_matrix.ix[cursor-1, :]
-        proj_vol_holding.ix[tradable] = projected_vol
+        #proj_vol_holding = pd.Series(self.real_vol_position.holding_matrix.ix[cursor-1, :]
+        #proj_vol_holding.ix[tradable] = projected_vol
+        proj_vol_holding = projected_vol.reindex(self.real_vol_position.holding_matrix.columns, fill_value=0)
         
         return proj_vol_holding
         
@@ -334,13 +335,15 @@ class backtest(object):
         # 画图
         self.bkt_performance.plot_performance()
 
-    # 利用回测得到的数据进行业绩归因
+    # 利用回测得到的数据，或直接算出的数据进行业绩归因
     def get_performance_attribution(self, *, benchmark_position='default', outside_bb='Empty', discard_factor=[],
-                                    show_warning=True):
-#        self.bkt_pa = performance_attribution(self.real_pct_position, benchmark_position=benchmark_position,
-#                                              portfolio_returns=self.bkt_performance.log_return)
-        self.bkt_pa = performance_attribution(self.tar_pct_position, benchmark_position=benchmark_position,
-                                              )
+                                    show_warning=True, is_real_world=False):
+        if is_real_world:
+            self.bkt_pa = performance_attribution(self.real_pct_position, benchmark_position=benchmark_position,
+                                                  portfolio_returns=self.bkt_performance.log_return)
+        else:
+            self.bkt_pa = performance_attribution(self.tar_pct_position, benchmark_position=benchmark_position,
+                                                  )
         self.bkt_pa.execute_performance_attribution(outside_bb=outside_bb, discard_factor=discard_factor,
                                                     show_warning=show_warning)
         self.bkt_pa.plot_performance_attribution()

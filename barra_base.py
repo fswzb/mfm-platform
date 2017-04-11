@@ -726,6 +726,32 @@ class barra_base(object):
         if not self.is_update and self.bb_data.stock_pool == 'all' and __name__=='__main__':
             data.write_data(self.bb_data.factor)
 
+    # 仅计算barra base的因子值，主要用于对于不同股票池，可以率先建立一个只有因子值而没有暴露的bb对象
+    def just_get_sytle_factor(self):
+        # 读取数据，更新数据则不用读取，因为已经存在
+        if not self.is_update:
+            self.read_original_data()
+        # 创建风格因子
+        self.get_lncap()
+        self.get_beta_parallel()
+        print('get beta completed...\n')
+        self.get_momentum()
+        print('get momentum completed...\n')
+        self.get_residual_volatility()
+        print('get rv completed...\n')
+        self.get_nonlinear_size()
+        print('get nls completed...\n')
+        self.get_pb()
+        self.get_liquidity()
+        print('get liquidity completed...\n')
+        self.get_earnings_yeild()
+        print('get ey completed...\n')
+        self.get_growth()
+        self.get_leverage()
+        print('get leverage completed...\n')
+        # 计算风格因子暴露之前再过滤一次
+        self.bb_data.discard_uninv_data()
+
     # 仅计算barra base的因子暴露，主要用于对与不同股票池，可以在不重新建立新对象的情况下，根据已有因子值算不同的因子暴露
     def just_get_factor_expo(self):
         self.bb_data.discard_uninv_data()

@@ -237,10 +237,12 @@ class strategy_data(data):
         
     # 对数据进行回归取残差提纯，即gram-schmidt正交化
     @staticmethod
-    def simple_orth_gs(obj, base, *, weights = 'default'):
+    def simple_orth_gs(obj, base, *, weights = 'default', add_constant=True):
         # 定义回归函数
-        def reg_func(y, x, *, weights=1):
-            x = sm.add_constant(x)
+        # 注意，用barra base回归时，行业暴露已经包含截距项，因此不能再添加截距项
+        def reg_func(y, x, *, weights=1, add_constant=True):
+            if add_constant:
+                x = sm.add_constant(x)
             # 如果只有小于等于1个有效数据，则返回nan序列
             if pd.concat([y,x], axis=1).dropna().shape[0] <= 1:
                 return pd.Series(np.nan, index=y.index)
@@ -251,10 +253,11 @@ class strategy_data(data):
         new_obj = obj*np.nan
         if weights is 'default':
             for cursor, date in enumerate(obj.index):
-                new_obj.ix[cursor] = reg_func(obj.ix[cursor], base.ix[:,cursor,:])
+                new_obj.ix[cursor] = reg_func(obj.ix[cursor], base.ix[:,cursor,:], add_constant=add_constant)
         else:
             for cursor, date in enumerate(obj.index):
-                new_obj.ix[cursor] = reg_func(obj.ix[cursor], base.ix[:,cursor,:], weights=weights.ix[cursor])
+                new_obj.ix[cursor] = reg_func(obj.ix[cursor], base.ix[:,cursor,:], weights=weights.ix[cursor],
+                                              add_constant=add_constant)
             # 如果提纯为加权的回归，则默认提纯是为了之后这个残差和base进行加权回归时相互正交
             # 即：实际为残差和加权（加根号权重）后的base因子正交，那么在之后进行加权回归的时候，会再一次的进行加权
             # 为了避免残差因子在那个时候连加两次权，这里必须进行调整，即：除以根号权重

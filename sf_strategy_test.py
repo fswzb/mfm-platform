@@ -42,7 +42,7 @@ def sf_test_multiple_pools(factor, *, direction='+', bb_obj='Empty', discard_fac
     # 建立bb对象，否则之后每次循环都要建立一次新的bb对象
     if bb_obj == 'Empty':
         bb_obj = barra_base()
-        bb_obj.construct_barra_base()
+        bb_obj.just_get_sytle_factor()
     # 外部传入的bb对象，要检测其股票池是否为all，如果不是all，则输出警告，因为可能丢失了数据
     elif bb_obj.bb_data.stock_pool != 'all':
         print('The stockpool of the barra_base obj from outside is NOT "all", be aware of possibile'
@@ -55,13 +55,87 @@ def sf_test_multiple_pools(factor, *, direction='+', bb_obj='Empty', discard_fac
         # 进行当前股票池下的单因子测试
         curr_sf.single_factor_test(factor=factor, direction=direction, bkt_obj=bkt_obj, bb_obj=bb_obj,
                                    discard_factor=discard_factor, bkt_start=bkt_start, bkt_end=bkt_end,
-                                   stock_pool=stock_pool)
+                                   stock_pool=stock_pool, do_pa=True)
 
-## 建立单因子策略对象
-#sf = single_factor_strategy()
+# 进行单因子测试
+#sf_test_multiple_pools(factor='FreeMarketValue', direction='-', bkt_start=pd.Timestamp('2009-03-03'),
+#                          bkt_end=pd.Timestamp('2017-03-30'), stock_pools=['all', 'hs300','zz500','zz800'])
 
-#sf.single_factor_test(factor='FreeMarketValue', direction='-', bkt_start=pd.Timestamp('2009-03-03'),
-#                      bkt_end=pd.Timestamp('2017-03-30'))
+# 测试eps_fy1, eps_fy2的varaition coeffcient
+eps_fy = data.read_data(['EPS_fy1', 'EPS_fy2'])
+eps_fy1 = eps_fy['EPS_fy1']
+eps_fy2 = eps_fy['EPS_fy2']
 
-sf_test_multiple_pools(factor='FreeMarketValue', direction='-', bkt_start=pd.Timestamp('2009-03-03'),
-                          bkt_end=pd.Timestamp('2017-03-30'), stock_pools=['all', 'hs300','zz500','zz800'])
+eps_vc = 0.5*eps_fy1.rolling(252).std()/eps_fy1.rolling(252).mean() + \
+         0.5*eps_fy1.rolling(252).std()/eps_fy1.rolling(252).mean()
+        
+sf_test_multiple_pools(factor=eps_vc, direction='-', bkt_start=pd.Timestamp('2009-03-03'),
+                          bkt_end=pd.Timestamp('2017-03-30'), stock_pools=['all', 'hs300', 'zz500', 'zz800'])
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
