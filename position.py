@@ -59,7 +59,7 @@ class position(object):
                 continue
             grouped = curr_data.groupby(industry.ix[time])
             # 进行行业内加权
-            after_inner = grouped.apply(inner_weighting)
+            after_inner = grouped.apply(inner_weighting).reset_index(level=0, drop=True)
             # 对行业间加权数据进行求和
             # 如果行业间权重为0，则为行业间等权，即每个行业的总权重为1，（注意不是每个股票的权重为1）
             if type(outter_weights) == int and outter_weights == 0:
@@ -67,8 +67,7 @@ class position(object):
             else:
                 outter_weights_sum = outter_weights.ix[time].groupby(industry.ix[time]).transform('sum')
             after_outter = after_inner.mul(outter_weights_sum).fillna(0)
-            print(time)
-            self.holding_matrix.ix[time] = after_outter.reset_index(level=0, drop=True)
+            self.holding_matrix.ix[time] = after_outter
         self.holding_matrix = self.holding_matrix.fillna(0)
         self.to_percentage()
         pass

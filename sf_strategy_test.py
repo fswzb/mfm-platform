@@ -26,7 +26,8 @@ from single_factor_strategy import single_factor_strategy
 
 # 根据多个股票池进行一次完整的单因子测试
 def sf_test_multiple_pools(factor, *, direction='+', bb_obj='Empty', discard_factor=[],
-                           stock_pools=['all', 'hs300', 'zz500', 'zz800'], bkt_start='default', bkt_end='default'):
+                           stock_pools=['all', 'hs300', 'zz500', 'zz800'], bkt_start='default', bkt_end='default',
+                           do_bb_pure_factor=False):
     # 如果传入的是str，则读取同名文件，如果是dataframe，则直接传入因子
     # 注意：这里的因子数据并不储存到self.strategy_data.factor中，因为循环股票池会丢失数据
     # 这里实际上是希望每次循环都有一个新的single factor strategy对象，
@@ -52,10 +53,12 @@ def sf_test_multiple_pools(factor, *, direction='+', bb_obj='Empty', discard_fac
     for stock_pool in stock_pools:
         # 建立单因子测试对象
         curr_sf = single_factor_strategy()
+
         # 进行当前股票池下的单因子测试
         curr_sf.single_factor_test(factor=factor, direction=direction, bkt_obj=bkt_obj, bb_obj=bb_obj,
                                    discard_factor=discard_factor, bkt_start=bkt_start, bkt_end=bkt_end,
-                                   stock_pool=stock_pool, do_pa=True)
+                                   stock_pool=stock_pool, do_pa=False, do_bb_pure_factor=do_bb_pure_factor)
+
 
 # 进行单因子测试
 #sf_test_multiple_pools(factor='FreeMarketValue', direction='-', bkt_start=pd.Timestamp('2009-03-03'),
@@ -68,9 +71,10 @@ eps_fy2 = eps_fy['EPS_fy2']
 
 eps_vc = 0.5*eps_fy1.rolling(252).std()/eps_fy1.rolling(252).mean() + \
          0.5*eps_fy1.rolling(252).std()/eps_fy1.rolling(252).mean()
-        
+
 sf_test_multiple_pools(factor=eps_vc, direction='-', bkt_start=pd.Timestamp('2009-03-03'),
-                          bkt_end=pd.Timestamp('2017-03-30'), stock_pools=['all', 'hs300', 'zz500', 'zz800'])
+                          bkt_end=pd.Timestamp('2017-03-30'), stock_pools=['all', 'hs300', 'zz500', 'zz800'], 
+                          do_bb_pure_factor=True)
 
 
 

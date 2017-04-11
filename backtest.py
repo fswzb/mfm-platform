@@ -326,18 +326,18 @@ class backtest(object):
                                   risk_free_rate = self.risk_free_rate) 
             
     # 计算回测得到的收益率数据，得到业绩指标以及绘图
-    def get_performance(self):
+    def get_performance(self, *, foldername='', filename=''):
         # 初始化performance对象
         self.initialize_performance()
         
         # 计算和输出业绩指标
         self.bkt_performance.get_performance()
         # 画图
-        self.bkt_performance.plot_performance()
+        self.bkt_performance.plot_performance(foldername=foldername, filename=filename)
 
     # 利用回测得到的数据，或直接算出的数据进行业绩归因
     def get_performance_attribution(self, *, benchmark_position='default', outside_bb='Empty', discard_factor=[],
-                                    show_warning=True, is_real_world=False):
+                                    show_warning=True, is_real_world=False, foldername='', filename=''):
         if is_real_world:
             self.bkt_pa = performance_attribution(self.real_pct_position, benchmark_position=benchmark_position,
                                                   portfolio_returns=self.bkt_performance.log_return)
@@ -346,7 +346,7 @@ class backtest(object):
                                                   )
         self.bkt_pa.execute_performance_attribution(outside_bb=outside_bb, discard_factor=discard_factor,
                                                     show_warning=show_warning)
-        self.bkt_pa.plot_performance_attribution()
+        self.bkt_pa.plot_performance_attribution(foldername=foldername, filename=filename)
 
     # 重置回测每次执行回测要改变的数据，若想不创建新回测对象而改变回测参数，则需重置这些数据后才能再次执行回测
     def reset_bkt_data(self):

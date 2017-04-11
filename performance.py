@@ -155,7 +155,7 @@ class performance(object):
         print('Stats END --------------------------------------------------------------------------\n')
 
     # 画图
-    def plot_performance(self):
+    def plot_performance(self, *, foldername='', filename=''):
         
         # 第一张图为策略自身累积收益曲线
         f1 = plt.figure()
@@ -170,6 +170,7 @@ class performance(object):
             plt.plot(self.cum_log_return_bench*100, 'r-', label = 'Benchmark')
             
         ax1.legend(loc = 'best')
+        plt.savefig(str(os.path.abspath('.'))+'/'+foldername+'/'+filename+'CumLog.png')
         
         # 第二张图为策略超额收益曲线，只有在有benchmark的时候才画
         if not self.benchmark.empty:
@@ -179,6 +180,8 @@ class performance(object):
             ax2.set_xlabel('Time')
             ax2.set_ylabel('Cumulative Log Return (%)')
             ax2.set_title('The Cumulative Excess Log Return of The Strategy')
+
+            plt.savefig(str(os.path.abspath('.')) + '/' +foldername+'/'+ filename + 'ActiveCumLog.png')
             
         # 第三张图为策略账户净值曲线
         f3 = plt.figure()
@@ -193,6 +196,7 @@ class performance(object):
             plt.plot(self.net_benchmark, 'r-', label = 'Benchmark')
             
         ax3.legend(loc = 'best')
+        plt.savefig(str(os.path.abspath('.')) + '/' +foldername+'/'+ filename + 'NetValue.png')
         
         # 第四张图为策略超额收益净值，只有在有benchmark的时候才画
         if not self.benchmark.empty:
@@ -202,7 +206,7 @@ class performance(object):
             ax4.set_xlabel('Time')
             ax4.set_ylabel('Excess Net Value')
             ax4.set_title('The Excess Net Value of The Strategy')
-            
+            plt.savefig(str(os.path.abspath('.')) + '/'+foldername+'/' + filename + 'ActiveNetValue.png')
             
             
         
