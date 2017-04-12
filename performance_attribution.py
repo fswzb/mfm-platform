@@ -28,14 +28,13 @@ class performance_attribution(object):
     foo
     """
 
-    def __init__(self, input_position, *, benchmark_position='default', portfolio_returns='default'):
+    def __init__(self, input_position, *, benchmark_weight='default', portfolio_returns='default'):
         self.pa_position = input_position
 
         # 如果传入基准持仓数据，则归因超额收益
         self.is_benchmark = False
-        if type(benchmark_position) != str:
-            self.pa_position.holding_matrix = self.pa_position.holding_matrix.sub(benchmark_position.holding_matrix,
-                                                                                  fill_value=0)
+        if type(benchmark_weight) != str:
+            self.pa_position.holding_matrix = self.pa_position.holding_matrix.sub(benchmark_weight, fill_value=0)
             self.is_benchmark = True
 
         # 如果有传入组合收益，则直接用这个组合收益，如果没有则自己计算
@@ -126,7 +125,7 @@ class performance_attribution(object):
     # 注意，此类股票的出现必然导致归因的不准确，因为它们归入到了组合总收益中，但不会被归入到缺少暴露值的因子收益中，因此进入到残余收益中
     # 这样不仅会使得残余收益含入因子收益，而且使得残余收益与因子收益之间具有显著相关性
     # 如果这样暴露缺失的股票比例很大，则使得归因不具有参考价值
-    def handle_discarded_stocks(self, *, show_warning=True, foldername='', filename=''):
+    def handle_discarded_stocks(self, *, show_warning=True, foldername=''):
         self.discarded_stocks_num = self.pa_returns.mul(0)
         self.discarded_stocks_wgt = self.pa_returns.mul(0)
         # 因子暴露有缺失值，没有参与归因的股票
@@ -158,12 +157,12 @@ class performance_attribution(object):
                              self.discarded_stocks_num['total'].mean(), self.discarded_stocks_wgt['total'].mean())
         print(target_str)
         # 将输出写到txt中
-        with open(str(os.path.abspath('.'))+'/'+foldername+'/'+filename+'performance.txt',
+        with open(str(os.path.abspath('.'))+'/'+foldername+'/performance.txt',
                   'a', encoding='GB18030') as text_file:
             text_file.write(target_str)
 
     # 进行画图
-    def plot_performance_attribution(self, *, foldername='', filename=''):
+    def plot_performance_attribution(self, *, foldername=''):
         # 处理中文图例的字体文件
         from matplotlib.font_manager import FontProperties
         chifont = FontProperties(fname='/System/Library/Fonts/STHeiti Light.ttc')      
@@ -179,7 +178,7 @@ class performance_attribution(object):
         ax1.set_ylabel('Cumulative Log Return (%)')
         ax1.set_title('The Cumulative Log Return of Factor Groups')
         ax1.legend(loc='best')
-        plt.savefig(str(os.path.abspath('.')) + '/' + foldername + '/' + filename + 'PA_RetSource.png')
+        plt.savefig(str(os.path.abspath('.')) + '/' + foldername + '/PA_RetSource.png', dpi=1200)
 
         # 第二张图分解组合的累计风格收益
         f2 = plt.figure()
@@ -189,7 +188,7 @@ class performance_attribution(object):
         ax2.set_ylabel('Cumulative Log Return (%)')
         ax2.set_title('The Cumulative Log Return of Style Factors')
         ax2.legend(self.port_pa_returns.columns[0:10], loc='best')
-        plt.savefig(str(os.path.abspath('.')) + '/' + foldername + '/' + filename + 'PA_CumRetStyle.png')
+        plt.savefig(str(os.path.abspath('.')) + '/' + foldername + '/PA_CumRetStyle.png', dpi=1200)
 
         # 第三张图分解组合的累计行业收益
         # 行业图示只给出最大和最小的5个行业
@@ -213,7 +212,7 @@ class performance_attribution(object):
         ax3.set_ylabel('Cumulative Log Return (%)')
         ax3.set_title('The Cumulative Log Return of Industrial Factors')
         ax3.legend(loc='best', prop=chifont)
-        plt.savefig(str(os.path.abspath('.'))+'/'+foldername+'/'+filename+'PA_CumRetIndus.png')
+        plt.savefig(str(os.path.abspath('.'))+'/'+foldername+'/PA_CumRetIndus.png', dpi=1200)
 
         # 第四张图画组合的累计风格暴露
         f4 = plt.figure()
@@ -223,7 +222,7 @@ class performance_attribution(object):
         ax4.set_ylabel('Cumulative Factor Exposures')
         ax4.set_title('The Cumulative Style Factor Exposures of the Portfolio')
         ax4.legend(self.port_expo.columns[0:10], loc='best')
-        plt.savefig(str(os.path.abspath('.'))+'/'+foldername+'/'+filename+'PA_CumExpoStyle.png')
+        plt.savefig(str(os.path.abspath('.'))+'/'+foldername+'/PA_CumExpoStyle.png', dpi=1200)
 
         # 第五张图画组合的累计行业暴露
         f5 = plt.figure()
@@ -239,7 +238,7 @@ class performance_attribution(object):
         ax5.set_ylabel('Cumulative Factor Exposures')
         ax5.set_title('The Cumulative Industrial Factor Exposures of the Portfolio')
         ax5.legend(loc='best', prop=chifont)
-        plt.savefig(str(os.path.abspath('.'))+'/'+foldername+'/'+filename+'PA_CumExpoIndus.png')
+        plt.savefig(str(os.path.abspath('.'))+'/'+foldername+'/PA_CumExpoIndus.png', dpi=1200)
 
         # 第六张图画组合的每日风格暴露
         f6 = plt.figure()
@@ -249,7 +248,7 @@ class performance_attribution(object):
         ax6.set_ylabel('Factor Exposures')
         ax6.set_title('The Style Factor Exposures of the Portfolio')
         ax6.legend(self.port_expo.columns[0:10], loc='best')
-        plt.savefig(str(os.path.abspath('.'))+'/'+foldername+'/'+filename+'PA_ExpoStyle.png')
+        plt.savefig(str(os.path.abspath('.'))+'/'+foldername+'/PA_ExpoStyle.png', dpi=1200)
 
         # 第七张图画组合的每日行业暴露
         f7 = plt.figure()
@@ -265,15 +264,15 @@ class performance_attribution(object):
         ax7.set_ylabel('Factor Exposures')
         ax7.set_title('The Industrial Factor Exposures of the Portfolio')
         ax7.legend(loc='best', prop=chifont)
-        plt.savefig(str(os.path.abspath('.'))+'/'+foldername+'/'+filename+'PA_ExpoIndus.png')
+        plt.savefig(str(os.path.abspath('.'))+'/'+foldername+'/PA_ExpoIndus.png', dpi=1200)
 
     # 进行业绩归因
     def execute_performance_attribution(self, *, outside_bb='Empty', discard_factor=[], show_warning=True, 
-                                        foldername='', filename=''):
+                                        foldername=''):
         self.construnct_bb(outside_bb=outside_bb)
         self.get_pa_return(discard_factor=discard_factor)
         self.analyze_pa_outcome()
-        self.handle_discarded_stocks(show_warning=show_warning, foldername=foldername, filename=filename)
+        self.handle_discarded_stocks(show_warning=show_warning, foldername=foldername)
 
 
 

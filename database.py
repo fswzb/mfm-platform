@@ -493,6 +493,13 @@ class database(object):
         old_if_tradable = data.read_data(if_tradable_name_list, if_tradable_name_list)
         old_benchmark_price = data.read_data(benchmark_price_name_list, benchmark_price_name_list)
 
+        # 新数据中的股票数可能与旧数据已经不同，要将旧数据中的股票索引换成新数据的索引
+        new_stock_index = self.data.stock_price.minor_axis
+        old_stock_price = old_stock_price.reindex(minor_axis=new_stock_index)
+        old_raw_data = old_raw_data.reindex(minor_axis=new_stock_index)
+        old_if_tradable = old_if_tradable.reindex(minor_axis=new_stock_index)
+        old_benchmark_price = old_benchmark_price.reindex(minor_axis=new_stock_index)
+
         # 衔接新旧数据
         new_stock_price = pd.concat([old_stock_price.drop(last_day, axis=1).sort_index(),
                                      self.data.stock_price.sort_index()], axis=1)
@@ -514,8 +521,11 @@ class database(object):
         self.data.raw_data['TotalLiability'] = self.data.raw_data['TotalLiability'].fillna(method='ffill')
         self.data.raw_data['TotalEquity'] = self.data.raw_data['TotalEquity'].fillna(method='ffill')
         self.get_pb()
-        self.data.if_tradable['is_enlisted'] = self.data.if_tradable['is_enlisted'].fillna(method='ffill').astype(np.int)
-        self.data.if_tradable['is_delisted'] = self.data.if_tradable['is_delisted'].fillna(method='ffill').astype(np.int)
+        # 注意这两个数据在用旧数据向前填na之后，还要再fill一次na，因为更新的时候出现的新股票，之前的旧数据因为重索引的关系，也是nan
+        self.data.if_tradable['is_enlisted'] = self.data.if_tradable['is_enlisted'].\
+            fillna(method='ffill').fillna(0).astype(np.int)
+        self.data.if_tradable['is_delisted'] = self.data.if_tradable['is_delisted'].\
+            fillna(method='ffill').fillna(0).astype(np.int)
         for index_name in benchmark_index_name:
             self.data.benchmark_price['Weight_'+index_name] = self.data.benchmark_price['Weight_'+index_name]\
                                                               .fillna(method='ffill')

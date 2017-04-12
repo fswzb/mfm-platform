@@ -807,6 +807,8 @@ class barra_base(object):
         # 开始计算新的因子值
         self.construct_barra_base()
 
+        # 将旧因子值的股票索引换成新的因子值的股票索引
+        old_bb_factors = old_bb_factors.reindex(minor_axis=self.bb_data.factor.minor_axis)
         # 衔接新旧因子值
         new_factor_data = pd.concat([old_bb_factors, self.bb_data.factor], axis=1)
         self.bb_data.factor = new_factor_data.groupby(new_factor_data.major_axis).first()

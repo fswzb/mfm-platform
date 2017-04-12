@@ -152,9 +152,6 @@ class backtest(object):
         self.bkt_performance = 'The performance object of this backtest object has NOT been initialized, '\
                                'please try to call this attribute after call backtest.get_performance()\n'
 
-        # 显示回测是否重置的标签，多次用到同一个回测对象时，用其控制回测数据的重置
-        self.is_bkt_reset = True
-
         # 初始化结束时，目标和实际持仓矩阵、回测数据都是一样的时间股票索引（即策略持仓股票为股票索引，回测期间为时间索引），
         # 传入的bkt_position股票索引是一样的，但是时间索引为调仓日的时间
         print('The backtest system has been successfully initialized!\n')
@@ -164,7 +161,6 @@ class backtest(object):
         
         foo
         """
-        self.is_bkt_reset = False
         cursor = -1
         # 开始执行循环，对tar_pct_position.holding_matrix进行循环
         for curr_time, curr_tar_pct_holding in self.tar_pct_position.holding_matrix.iterrows():
@@ -326,40 +322,37 @@ class backtest(object):
                                   risk_free_rate = self.risk_free_rate) 
             
     # 计算回测得到的收益率数据，得到业绩指标以及绘图
-    def get_performance(self, *, foldername='', filename=''):
+    def get_performance(self, *, foldername=''):
         # 初始化performance对象
         self.initialize_performance()
         
         # 计算和输出业绩指标
-        self.bkt_performance.get_performance(foldername=foldername, filename=filename)
+        self.bkt_performance.get_performance(foldername=foldername)
         # 画图
-        self.bkt_performance.plot_performance(foldername=foldername, filename=filename)
+        self.bkt_performance.plot_performance(foldername=foldername)
 
     # 利用回测得到的数据，或直接算出的数据进行业绩归因
-    def get_performance_attribution(self, *, benchmark_position='default', outside_bb='Empty', discard_factor=[],
-                                    show_warning=True, is_real_world=False, foldername='', filename=''):
+    def get_performance_attribution(self, *, benchmark_weight='default', outside_bb='Empty', discard_factor=[],
+                                    show_warning=True, is_real_world=False, foldername=''):
         if is_real_world:
-            self.bkt_pa = performance_attribution(self.real_pct_position, benchmark_position=benchmark_position,
+            self.bkt_pa = performance_attribution(self.real_pct_position, benchmark_weight=benchmark_weight,
                                                   portfolio_returns=self.bkt_performance.log_return)
         else:
-            self.bkt_pa = performance_attribution(self.tar_pct_position, benchmark_position=benchmark_position,
+            self.bkt_pa = performance_attribution(self.tar_pct_position, benchmark_weight=benchmark_weight,
                                                   )
         self.bkt_pa.execute_performance_attribution(outside_bb=outside_bb, discard_factor=discard_factor,
-                                                    show_warning=show_warning, foldername=foldername, 
-                                                    filename=filename)
-        self.bkt_pa.plot_performance_attribution(foldername=foldername, filename=filename)
+                                                    show_warning=show_warning, foldername=foldername)
+        self.bkt_pa.plot_performance_attribution(foldername=foldername)
 
     # 重置回测每次执行回测要改变的数据，若想不创建新回测对象而改变回测参数，则需重置这些数据后才能再次执行回测
     def reset_bkt_data(self):
-        if not self.is_bkt_reset:
-            # 重置现金序列，账户序列以及benchmark序列
-            self.cash = pd.Series(np.zeros(self.real_vol_position.holding_matrix.shape[0]),
-                                  index=self.real_vol_position.holding_matrix.index)
-            self.cash.ix[0] = self.initial_money * self.trade_ratio
-            self.account_value = []
-            self.benchmark_value = self.bkt_data.benchmark_price.ix['ClosePrice', :, 0]
+        # 重置现金序列，账户序列以及benchmark序列
+        self.cash = pd.Series(np.zeros(self.real_vol_position.holding_matrix.shape[0]),
+                              index=self.real_vol_position.holding_matrix.index)
+        self.cash.ix[0] = self.initial_money * self.trade_ratio
+        self.account_value = []
+        self.benchmark_value = self.bkt_data.benchmark_price.ix['ClosePrice', :, 0]
 
-            self.is_bkt_reset = True
 
     # 重置传入的持仓矩阵参数的函数，当要测试同一个策略的不同参数对其的影响时，会用到，这样可以不必重新创建一个回测对象
     # 注意这里只改变了传入的持仓矩阵，包括回测时间，股票id，benchmark等其余参数一律不变

@@ -236,7 +236,7 @@ class single_factor_strategy(strategy):
         ax.set_xlabel('Time')
         ax.set_ylabel('Return of The Factor (%)')
         ax.set_title('The Return Series of The Factor')
-        plt.savefig(str(os.path.abspath('.')) + '/' + self.strategy_data.stock_pool + '/' + 'FactorReturn.png')
+        plt.savefig(str(os.path.abspath('.')) + '/' + self.strategy_data.stock_pool + '/' + 'FactorReturn.png', dpi=1200)
 
         fx = plt.figure()
         ax = fx.add_subplot(1, 1, 1)
@@ -245,7 +245,7 @@ class single_factor_strategy(strategy):
         ax.set_xlabel('Time')
         ax.set_ylabel('T-Stats of The Factor Return')
         ax.set_title('The T-Stats Series of The Factor Return')
-        plt.savefig(str(os.path.abspath('.')) + '/' + self.strategy_data.stock_pool + '/' + 'FactorReturnTStats.png')
+        plt.savefig(str(os.path.abspath('.')) + '/' + self.strategy_data.stock_pool + '/' + 'FactorReturnTStats.png', dpi=1200)
             
     # 计算因子的IC，股票收益率是以holding_freq为频率的的收益率，默认为月
     def get_factor_ic(self, *, holding_freq='m', direction = '+'):
@@ -302,7 +302,7 @@ class single_factor_strategy(strategy):
         ax.set_xlabel('Time')
         ax.set_ylabel('IC of The Factor')
         ax.set_title('The IC Time Series of The Factor')
-        plt.savefig(str(os.path.abspath('.')) + '/' + self.strategy_data.stock_pool + '/' + 'FactorIC.png')
+        plt.savefig(str(os.path.abspath('.')) + '/' + self.strategy_data.stock_pool + '/' + 'FactorIC.png', dpi=1200)
         
     # 根据分位数分组选股，用来画同一因子不同分位数分组之间的收益率对比，以此判断因子的有效性
     def select_qgroup(self, no_of_groups, group, *, direction = '+', weight = 0):
@@ -375,7 +375,7 @@ class single_factor_strategy(strategy):
                     short_series = bkt.bkt_performance.net_account_value
 
             ax1.legend(loc='best')
-            plt.savefig(str(os.path.abspath('.')) + '/' + self.strategy_data.stock_pool + '/' + 'QGroupsNetValue.png')
+            plt.savefig(str(os.path.abspath('.')) + '/' + self.strategy_data.stock_pool + '/' + 'QGroupsNetValue.png', dpi=1200)
 
             # 画long-short的图
             f2 = plt.figure()
@@ -384,7 +384,7 @@ class single_factor_strategy(strategy):
             ax2.set_ylabel('Net Account Value')
             ax2.set_title('Net Account Value of Long-Short Portfolio of The Factor')
             plt.plot(long_series - short_series)
-            plt.savefig(str(os.path.abspath('.')) + '/' + self.strategy_data.stock_pool + '/' + 'LongShortNetValue.png')
+            plt.savefig(str(os.path.abspath('.')) + '/' + self.strategy_data.stock_pool + '/' + 'LongShortNetValue.png', dpi=1200)
 
         elif value == 2:
             # 先初始化图片
@@ -415,7 +415,7 @@ class single_factor_strategy(strategy):
                     short_series = bkt.bkt_performance.cum_log_return
 
             ax1.legend(loc='best')
-            plt.savefig(str(os.path.abspath('.')) + '/' + self.strategy_data.stock_pool + '/' + 'QGroupsCumLog.png')
+            plt.savefig(str(os.path.abspath('.')) + '/' + self.strategy_data.stock_pool + '/' + 'QGroupsCumLog.png', dpi=1200)
 
             # 画long-short的图
             f2 = plt.figure()
@@ -424,12 +424,13 @@ class single_factor_strategy(strategy):
             ax2.set_ylabel('Cumulative Log Return (%)')
             ax2.set_title('Cumulative Log Return of Long-Short Portfolio of The Factor')
             plt.plot((long_series - short_series) * 100)
-            plt.savefig(str(os.path.abspath('.')) + '/' + self.strategy_data.stock_pool + '/' + 'LongShortCumLog.png')
+            plt.savefig(str(os.path.abspath('.')) + '/' + self.strategy_data.stock_pool + '/' + 'LongShortCumLog.png', dpi=1200)
 
     # 根据一个股票池进行一次完整的单因子测试的函数
-    def single_factor_test(self, *, factor, direction='+', bkt_obj='Empty', bb_obj='Empty', pa_benchmark_position='default',
+    # select method为单因子测试策略的选股方式，0为按比例选股，1为分行业按比例选股
+    def single_factor_test(self, *, factor, direction='+', bkt_obj='Empty', bb_obj='Empty', pa_benchmark_weight='default',
                            discard_factor=[], bkt_start='default', bkt_end='default', stock_pool='all', do_pa=True,
-                           do_bb_pure_factor=False):
+                           do_bb_pure_factor=False, select_method=0, do_active_pa=False):
         # 如果传入的是str，则读取同名文件，如果是dataframe，则直接传入因子
         if type(factor) == str:
             self.read_factor_data([factor], [factor], shift=True)
@@ -488,8 +489,11 @@ class single_factor_strategy(strategy):
             # 将得到的纯化因子放入因子值中储存
             self.strategy_data.factor.iloc[0] = pure_factor_expo
 
-        # 简单分位数选股
-        self.select_stocks(weight=1, direction=direction)
+        if select_method == 0:
+            # 简单分位数选股
+            self.select_stocks(weight=1, direction=direction)
+        elif select_method == 1:
+            self.select_stocks_within_indus(weight=2, direction=direction)
 
         # 如果有外来的backtest对象，则使用这个backtest对象，如果没有，则需要自己建立，同时传入最新持仓
         if bkt_obj == 'Empty':
@@ -503,23 +507,15 @@ class single_factor_strategy(strategy):
         # 回测、画图、归因
         bkt_obj.execute_backtest()
         bkt_obj.get_performance(foldername=stock_pool)
+        # 如果要进行归因的话
         if do_pa:
-            bkt_obj.get_performance_attribution(outside_bb=bb_obj, benchmark_position=pa_benchmark_position,
-                                                discard_factor=discard_factor, show_warning=False, foldername=stock_pool)
-
-        # 行业内选股
-        # 重置策略持仓
-        self.reset_position()
-        self.select_stocks_within_indus(weight=2, direction=direction)
-        # 重置回测持仓、回测、画图、归因
-        bkt_obj.reset_bkt_position(self.position)
-        bkt_obj.execute_backtest()
-        bkt_obj.get_performance(foldername=stock_pool, filename='InIndus_')
-        if do_pa:
+            # 如果指定了要做超额收益的归因，且有股票池，则用相对基准的持仓来归因
+            # 而股票池为全市场的不进行超额归因，如果要这样做，则可显式传入pa benchmark weight
+            if do_active_pa and self.strategy_data.stock_pool != 'all':
+                pa_benchmark_weight = self.strategy_data.benchmark_price.ix['Weight_' + self.strategy_data.stock_pool]
             # 注意bb obj进行了一份深拷贝，这是因为在业绩归因的计算中，会根据不同的股票池丢弃数据，导致数据不全，因此不能传引用
-            bkt_obj.get_performance_attribution(outside_bb=copy.deepcopy(bb_obj), benchmark_position=pa_benchmark_position,
-                                                discard_factor=discard_factor, show_warning=False, foldername=stock_pool, 
-                                                filename='InIndus_')
+            bkt_obj.get_performance_attribution(outside_bb=bb_obj, benchmark_weight=pa_benchmark_weight,
+                                                discard_factor=discard_factor, show_warning=False, foldername=stock_pool)
 
         # 画单因子组合收益率
         self.get_factor_return(weights=np.sqrt(self.strategy_data.stock_price.ix['FreeMarketValue']),
@@ -527,7 +523,7 @@ class single_factor_strategy(strategy):
         # 画ic的走势图
         self.get_factor_ic(direction=direction, holding_freq='m')
         # 画分位数图和long short图
-        self.plot_qgroup(bkt_obj, 5, direction=direction, value=1, weight=0)
+        self.plot_qgroup(bkt_obj, 5, direction=direction, value=1, weight=1)
 
 
 
