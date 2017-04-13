@@ -10,7 +10,7 @@ Created on Wed Apr  5 09:17:06 2017
 import numpy as np
 import pandas as pd
 import matplotlib
-matplotlib.use('AGG')  # Do this BEFORE importing matplotlib.pyplot
+matplotlib.use('PDF')  # Do this BEFORE importing matplotlib.pyplot
 import matplotlib.pyplot as plt
 import matplotlib.pyplot as plt
 from pandas import Series, DataFrame, Panel
@@ -112,38 +112,38 @@ def sf_test_multiple_pools_parallel(factor, *, direction='+', bb_obj='Empty', di
 
 # 进行单因子测试
 
-# 测试eps_fy1, eps_fy2的varaition coeffcient
-eps_fy = data.read_data(['EPS_fy1', 'EPS_fy2'])
-eps_fy1 = eps_fy['EPS_fy1']
-eps_fy2 = eps_fy['EPS_fy2']
-
-eps_vc = 0.5*eps_fy1.rolling(252).std()/eps_fy1.rolling(252).mean() + \
-        0.5*eps_fy1.rolling(252).std()/eps_fy1.rolling(252).mean()
-
-# # 测试wq101中的因子
-# wq_data = data.read_data(['ClosePrice_adj', 'OpenPrice_adj', 'Volume'],
-#                          ['ClosePrice_adj', 'OpenPrice_adj', 'Volume'], shift=True)
-# # 因子3
-# f3_open_rank = wq_data.ix['OpenPrice_adj'].rank(1)
-# f3_vol_rank = wq_data.ix['Volume'].rank(1)
-# f3_open_rank_rolling = f3_open_rank.rolling(10)
-# f3_vol_rank_rolling = f3_vol_rank.rolling(10)
-# wq_f3 = -f3_open_rank_rolling.corr(f3_vol_rank_rolling)
+# # 测试eps_fy1, eps_fy2的varaition coeffcient
+# eps_fy = data.read_data(['EPS_fy1', 'EPS_fy2'])
+# eps_fy1 = eps_fy['EPS_fy1']
+# eps_fy2 = eps_fy['EPS_fy2']
 #
-# #因子2
-# f2_log_vol = np.log(wq_data.ix['Volume'])
-# f2_vol_rank_rolling = (f2_log_vol-f2_log_vol.shift(2)).rank(1).rolling(6)
-# f2_ret_rank_rolling = (wq_data.ix['ClosePrice_adj']/wq_data.ix['OpenPrice_adj']-1).rank(1).rolling(6)
-# wq_f2 = -f2_vol_rank_rolling.corr(f2_ret_rank_rolling)
+# eps_vc = 0.5*eps_fy1.rolling(252).std()/eps_fy1.rolling(252).mean() + \
+#         0.5*eps_fy1.rolling(252).std()/eps_fy1.rolling(252).mean()
+
+# 测试wq101中的因子
+wq_data = data.read_data(['ClosePrice_adj', 'OpenPrice_adj', 'Volume'],
+                         ['ClosePrice_adj', 'OpenPrice_adj', 'Volume'], shift=True)
+# 因子3
+f3_open_rank = wq_data.ix['OpenPrice_adj'].rank(1)
+f3_vol_rank = wq_data.ix['Volume'].rank(1)
+f3_open_rank_rolling = f3_open_rank.rolling(10)
+f3_vol_rank_rolling = f3_vol_rank.rolling(10)
+wq_f3 = -f3_open_rank_rolling.corr(f3_vol_rank_rolling)
+
+#因子2
+f2_log_vol = np.log(wq_data.ix['Volume'])
+f2_vol_rank_rolling = (f2_log_vol-f2_log_vol.shift(2)).rank(1).rolling(6)
+f2_ret_rank_rolling = (wq_data.ix['ClosePrice_adj']/wq_data.ix['OpenPrice_adj']-1).rank(1).rolling(6)
+wq_f2 = -f2_vol_rank_rolling.corr(f2_ret_rank_rolling)
 
 
-sf_test_multiple_pools(factor=eps_vc, direction='+', bkt_start=pd.Timestamp('2009-03-03'),
-                         bkt_end=pd.Timestamp('2017-03-30'), stock_pools=['hs300'],
-                         do_bb_pure_factor=False, do_pa=True, select_method=1, do_active_pa=True)
+# sf_test_multiple_pools(factor=eps_vc, direction='+', bkt_start=pd.Timestamp('2009-03-03'),
+#                          bkt_end=pd.Timestamp('2017-03-30'), stock_pools=['hs300'],
+#                          do_bb_pure_factor=False, do_pa=True, select_method=1, do_active_pa=True)
 
-# sf_test_multiple_pools_parallel(factor=eps_vc, direction='-', bkt_start=pd.Timestamp('2009-03-03'),
-#                            bkt_end=pd.Timestamp('2017-03-30'), stock_pools=['zz500', 'zz800'],
-#                            do_bb_pure_factor=False, do_pa=True, select_method=1, do_active_pa=False)
+sf_test_multiple_pools_parallel(factor=wq_f3, direction='+', bkt_start=pd.Timestamp('2009-03-03'),
+                           bkt_end=pd.Timestamp('2017-03-30'), stock_pools=['all', 'hs300', 'zz500', 'zz800'],
+                           do_bb_pure_factor=False, do_pa=True, select_method=0, do_active_pa=False)
 
 
 

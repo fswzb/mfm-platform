@@ -158,9 +158,6 @@ class performance(object):
 
         print(target_str)
 
-        # 如果没有文件夹，则建立一个文件夹
-        if not os.path.exists(str(os.path.abspath('.')) + '/' + foldername + '/'):
-            os.makedirs(str(os.path.abspath('.')) + '/' + foldername + '/')
         # 将输出写到txt中
         with open(str(os.path.abspath('.'))+'/'+foldername+'/performance.txt',
                   'w', encoding='GB18030') as text_file:
@@ -168,7 +165,7 @@ class performance(object):
 
 
     # 画图
-    def plot_performance(self, *, foldername=''):
+    def plot_performance(self, *, foldername='', pdfs='default'):
         
         # 第一张图为策略自身累积收益曲线
         f1 = plt.figure()
@@ -184,6 +181,7 @@ class performance(object):
             
         ax1.legend(loc = 'best')
         plt.savefig(str(os.path.abspath('.'))+'/'+foldername+'/CumLog.png', dpi=1200)
+        plt.savefig(pdfs, format='pdf')
         
         # 第二张图为策略超额收益曲线，只有在有benchmark的时候才画
         if not self.benchmark.empty:
@@ -195,6 +193,7 @@ class performance(object):
             ax2.set_title('The Cumulative Excess Log Return of The Strategy')
 
             plt.savefig(str(os.path.abspath('.')) + '/' +foldername+'/ActiveCumLog.png', dpi=1200)
+            plt.savefig(pdfs, format='pdf')
             
         # 第三张图为策略账户净值曲线
         f3 = plt.figure()
@@ -210,6 +209,7 @@ class performance(object):
             
         ax3.legend(loc = 'best')
         plt.savefig(str(os.path.abspath('.')) + '/' +foldername+'/NetValue.png', dpi=1200)
+        plt.savefig(pdfs, format='pdf')
         
         # 第四张图为策略超额收益净值，只有在有benchmark的时候才画
         if not self.benchmark.empty:
@@ -220,6 +220,8 @@ class performance(object):
             ax4.set_ylabel('Excess Net Value')
             ax4.set_title('The Excess Net Value of The Strategy')
             plt.savefig(str(os.path.abspath('.')) + '/'+foldername+'/ActiveNetValue.png', dpi=1200)
+            plt.savefig(pdfs, format='pdf')
+
             
             
         

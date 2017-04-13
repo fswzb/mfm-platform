@@ -29,13 +29,14 @@ class performance_attribution(object):
     """
 
     def __init__(self, input_position, *, benchmark_weight='default', portfolio_returns='default'):
-        self.pa_position = input_position
-
+        self.pa_position = position(input_position.holding_matrix)
         # 如果传入基准持仓数据，则归因超额收益
         self.is_benchmark = False
         if type(benchmark_weight) != str:
-            self.pa_position.holding_matrix = self.pa_position.holding_matrix.sub(benchmark_weight, fill_value=0)
+            self.pa_position.holding_matrix = input_position.holding_matrix.sub(benchmark_weight, fill_value=0)
             self.is_benchmark = True
+        elif benchmark_weight == 'default':
+            self.pa_position.holding_matrix = input_position.holding_matrix
 
         # 如果有传入组合收益，则直接用这个组合收益，如果没有则自己计算
         self.port_returns = pd.DataFrame()
@@ -162,7 +163,7 @@ class performance_attribution(object):
             text_file.write(target_str)
 
     # 进行画图
-    def plot_performance_attribution(self, *, foldername=''):
+    def plot_performance_attribution(self, *, foldername='', pdfs='default'):
         # 处理中文图例的字体文件
         from matplotlib.font_manager import FontProperties
         chifont = FontProperties(fname='/System/Library/Fonts/STHeiti Light.ttc')      
@@ -179,6 +180,7 @@ class performance_attribution(object):
         ax1.set_title('The Cumulative Log Return of Factor Groups')
         ax1.legend(loc='best')
         plt.savefig(str(os.path.abspath('.')) + '/' + foldername + '/PA_RetSource.png', dpi=1200)
+        plt.savefig(pdfs, format='pdf')
 
         # 第二张图分解组合的累计风格收益
         f2 = plt.figure()
@@ -189,6 +191,7 @@ class performance_attribution(object):
         ax2.set_title('The Cumulative Log Return of Style Factors')
         ax2.legend(self.port_pa_returns.columns[0:10], loc='best')
         plt.savefig(str(os.path.abspath('.')) + '/' + foldername + '/PA_CumRetStyle.png', dpi=1200)
+        plt.savefig(pdfs, format='pdf')
 
         # 第三张图分解组合的累计行业收益
         # 行业图示只给出最大和最小的5个行业
@@ -213,6 +216,7 @@ class performance_attribution(object):
         ax3.set_title('The Cumulative Log Return of Industrial Factors')
         ax3.legend(loc='best', prop=chifont)
         plt.savefig(str(os.path.abspath('.'))+'/'+foldername+'/PA_CumRetIndus.png', dpi=1200)
+        plt.savefig(pdfs, format='pdf')
 
         # 第四张图画组合的累计风格暴露
         f4 = plt.figure()
@@ -223,6 +227,7 @@ class performance_attribution(object):
         ax4.set_title('The Cumulative Style Factor Exposures of the Portfolio')
         ax4.legend(self.port_expo.columns[0:10], loc='best')
         plt.savefig(str(os.path.abspath('.'))+'/'+foldername+'/PA_CumExpoStyle.png', dpi=1200)
+        plt.savefig(pdfs, format='pdf')
 
         # 第五张图画组合的累计行业暴露
         f5 = plt.figure()
@@ -239,6 +244,7 @@ class performance_attribution(object):
         ax5.set_title('The Cumulative Industrial Factor Exposures of the Portfolio')
         ax5.legend(loc='best', prop=chifont)
         plt.savefig(str(os.path.abspath('.'))+'/'+foldername+'/PA_CumExpoIndus.png', dpi=1200)
+        plt.savefig(pdfs, format='pdf')
 
         # 第六张图画组合的每日风格暴露
         f6 = plt.figure()
@@ -249,6 +255,7 @@ class performance_attribution(object):
         ax6.set_title('The Style Factor Exposures of the Portfolio')
         ax6.legend(self.port_expo.columns[0:10], loc='best')
         plt.savefig(str(os.path.abspath('.'))+'/'+foldername+'/PA_ExpoStyle.png', dpi=1200)
+        plt.savefig(pdfs, format='pdf')
 
         # 第七张图画组合的每日行业暴露
         f7 = plt.figure()
@@ -265,6 +272,7 @@ class performance_attribution(object):
         ax7.set_title('The Industrial Factor Exposures of the Portfolio')
         ax7.legend(loc='best', prop=chifont)
         plt.savefig(str(os.path.abspath('.'))+'/'+foldername+'/PA_ExpoIndus.png', dpi=1200)
+        plt.savefig(pdfs, format='pdf')
 
     # 进行业绩归因
     def execute_performance_attribution(self, *, outside_bb='Empty', discard_factor=[], show_warning=True, 
