@@ -492,6 +492,8 @@ class database(object):
         old_raw_data = data.read_data(raw_data_name_list, raw_data_name_list)
         old_if_tradable = data.read_data(if_tradable_name_list, if_tradable_name_list)
         old_benchmark_price = data.read_data(benchmark_price_name_list, benchmark_price_name_list)
+        old_const_data = data.read_data(['const_data'], ['const_data'])
+        old_const_data = old_const_data.ix['const_data']
 
         # 新数据中的股票数可能与旧数据已经不同，要将旧数据中的股票索引换成新数据的索引
         new_stock_index = self.data.stock_price.minor_axis
@@ -509,11 +511,14 @@ class database(object):
                                      self.data.if_tradable.sort_index()], axis=1)
         new_benchmark_price = pd.concat([old_benchmark_price.drop(last_day, axis=1).sort_index(),
                                      self.data.benchmark_price.sort_index()], axis=1)
+        new_const_data = pd.concat([old_const_data.drop(last_day, axis=0).sort_index(axis=1),
+                                    self.data.const_data.sort_index(axis=1)], axis=0)
 
         self.data.stock_price = new_stock_price
         self.data.raw_data = new_raw_data
         self.data.if_tradable = new_if_tradable
         self.data.benchmark_price = new_benchmark_price
+        self.data.const_data = new_const_data
 
         # 对需要的数据进行fillna，以及fillna后的重新计算
         # 主要是那些用到first_date参数的数据，以及涉及这些数据的衍生数据

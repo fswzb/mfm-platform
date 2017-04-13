@@ -137,13 +137,13 @@ eps_vc = 0.5*eps_fy1.rolling(252).std()/eps_fy1.rolling(252).mean() + \
 # wq_f2 = -f2_vol_rank_rolling.corr(f2_ret_rank_rolling)
 
 
-#sf_test_multiple_pools(factor=wq_f3, direction='+', bkt_start=pd.Timestamp('2009-03-03'),
-#                          bkt_end=pd.Timestamp('2017-03-30'), stock_pools=['hs300'],
-#                          do_bb_pure_factor=False, do_pa=False)
+sf_test_multiple_pools(factor=eps_vc, direction='+', bkt_start=pd.Timestamp('2009-03-03'),
+                         bkt_end=pd.Timestamp('2017-03-30'), stock_pools=['hs300'],
+                         do_bb_pure_factor=False, do_pa=True, select_method=1, do_active_pa=True)
 
-sf_test_multiple_pools_parallel(factor=eps_vc, direction='-', bkt_start=pd.Timestamp('2009-03-03'),
-                           bkt_end=pd.Timestamp('2017-03-30'), stock_pools=['zz500', 'zz800'],
-                           do_bb_pure_factor=True, do_pa=True, select_method=0, do_active_pa=False)
+# sf_test_multiple_pools_parallel(factor=eps_vc, direction='-', bkt_start=pd.Timestamp('2009-03-03'),
+#                            bkt_end=pd.Timestamp('2017-03-30'), stock_pools=['zz500', 'zz800'],
+#                            do_bb_pure_factor=False, do_pa=True, select_method=1, do_active_pa=False)
 
 
 

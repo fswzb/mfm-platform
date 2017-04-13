@@ -164,7 +164,8 @@ class single_factor_strategy(strategy):
     # 单因子的因子收益率计算和检验，用来判断因子有效性，
     # holding_freq为回归收益的频率，默认为月，可调整为与调仓周期一样，也可不同
     # weights为用来回归的权重，默认为等权回归
-    def get_factor_return(self, *, holding_freq='m', weights='default', direction='+', plot_cum=True):
+    def get_factor_return(self, *, holding_freq='m', weights='default', direction='+', plot_cum=True,
+                          start='default', end='default'):
         # 如果没有price的数据，读入price数据，注意要shift，
         # 即本来的实现收益率应当是调仓日当天的开盘价，但这里计算调仓日前一个交易日的收盘价。
         if 'ClosePrice_adj' not in self.strategy_data.stock_price.items:
@@ -174,6 +175,11 @@ class single_factor_strategy(strategy):
         # 计算因子收益的频率
         holding_days = strategy.resample_tradingdays(self.strategy_data.stock_price.\
                                                      ix['FreeMarketValue', :, 0], freq=holding_freq)
+        # 如果有指定，只取start和end之间的时间计算
+        if start != 'default':
+            holding_days = holding_days[start:]
+        if end != 'default':
+            holding_days = holding_days[:end]
         # 计算股票对数收益以及因子暴露
         holding_day_price = self.strategy_data.stock_price.ix['ClosePrice_adj',holding_days,:]
         holding_day_return = np.log(holding_day_price.div(holding_day_price.shift(1)))
@@ -248,7 +254,7 @@ class single_factor_strategy(strategy):
         plt.savefig(str(os.path.abspath('.')) + '/' + self.strategy_data.stock_pool + '/' + 'FactorReturnTStats.png', dpi=1200)
             
     # 计算因子的IC，股票收益率是以holding_freq为频率的的收益率，默认为月
-    def get_factor_ic(self, *, holding_freq='m', direction = '+'):
+    def get_factor_ic(self, *, holding_freq='m', direction = '+', start='default', end='default'):
         # 如果没有price的数据，读入price数据，注意要shift，
         # 即本来的实现收益率应当是调仓日当天的开盘价，但这里计算调仓日前一个交易日的收盘价。
         if 'ClosePrice_adj' not in self.strategy_data.stock_price.items:
@@ -258,6 +264,11 @@ class single_factor_strategy(strategy):
         # 计算ic的频率
         holding_days = strategy.resample_tradingdays(self.strategy_data.stock_price. \
                                                      ix['FreeMarketValue', :, 0], freq=holding_freq)
+        # 如果有指定，只取start和end之间的时间计算
+        if start != 'default':
+            holding_days = holding_days[start:]
+        if end != 'default':
+            holding_days = holding_days[:end]
         # 初始化ic矩阵
         ic_series = np.empty(holding_days.size)*np.nan
         self.ic_series = pd.Series(ic_series, index = holding_days)
@@ -493,6 +504,7 @@ class single_factor_strategy(strategy):
             # 简单分位数选股
             self.select_stocks(weight=1, direction=direction)
         elif select_method == 1:
+            # 分行业选股
             self.select_stocks_within_indus(weight=2, direction=direction)
 
         # 如果有外来的backtest对象，则使用这个backtest对象，如果没有，则需要自己建立，同时传入最新持仓
@@ -519,9 +531,9 @@ class single_factor_strategy(strategy):
 
         # 画单因子组合收益率
         self.get_factor_return(weights=np.sqrt(self.strategy_data.stock_price.ix['FreeMarketValue']),
-                               holding_freq='d', direction=direction)
+                               holding_freq='d', direction=direction, start=bkt_start, end=bkt_end)
         # 画ic的走势图
-        self.get_factor_ic(direction=direction, holding_freq='m')
+        self.get_factor_ic(direction=direction, holding_freq='m', start=bkt_start, end=bkt_end)
         # 画分位数图和long short图
         self.plot_qgroup(bkt_obj, 5, direction=direction, value=1, weight=1)
 
