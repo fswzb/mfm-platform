@@ -460,7 +460,7 @@ class single_factor_strategy(strategy):
 
         # 生成调仓日
         if self.holding_days.empty:
-            self.generate_holding_days()
+            self.generate_holding_days(holding_freq='w')
         # 初始化持仓或重置策略持仓
         if self.position.holding_matrix.empty:
             self.initialize_position(self.strategy_data.factor.ix[0, self.holding_days, :])

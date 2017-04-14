@@ -33,7 +33,11 @@ class performance_attribution(object):
         # 如果传入基准持仓数据，则归因超额收益
         self.is_benchmark = False
         if type(benchmark_weight) != str:
-            self.pa_position.holding_matrix = input_position.holding_matrix.sub(benchmark_weight, fill_value=0)
+            # 一些情况下benchmark的权重和不为1（一般为差一点），为了防止偏差，这里重新归一化
+            # 同时将时间索引控制在回测期间内
+            new_benchmark_weight = benchmark_weight.reindex(self.pa_position.holding_matrix.index).\
+                apply(lambda x:x if (x==0).all() else x.div(x.sum()), axis=1)
+            self.pa_position.holding_matrix = input_position.holding_matrix.sub(new_benchmark_weight, fill_value=0)
             self.is_benchmark = True
         elif benchmark_weight == 'default':
             self.pa_position.holding_matrix = input_position.holding_matrix
@@ -166,7 +170,8 @@ class performance_attribution(object):
     def plot_performance_attribution(self, *, foldername='', pdfs='default'):
         # 处理中文图例的字体文件
         from matplotlib.font_manager import FontProperties
-        chifont = FontProperties(fname='/System/Library/Fonts/STHeiti Light.ttc')      
+        # chifont = FontProperties(fname='/System/Library/Fonts/STHeiti Light.ttc')
+        chifont = FontProperties(fname=str(os.path.abspath('.'))+'/华文细黑.ttf')
         
         # 第一张图分解组合的累计收益来源
         f1 = plt.figure()

@@ -24,7 +24,7 @@ class performance(object):
     foo
     """
     
-    def __init__(self, account_value, *, benchmark = pd.Series(), 
+    def __init__(self, account_value, *, benchmark = pd.Series(), holding_days='default', info_series='default',
                  tradedays_one_year = 252, risk_free_rate = 0.05):
         """ Initialize performance object.
         
@@ -51,6 +51,10 @@ class performance(object):
         
         # 策略账户净值序列
         self.net_account_value = self.account_value / self.account_value.ix[0]
+        # 策略的调仓日，在有benchmark，计算策略的超额净值的时候会用到
+        self.holding_days = holding_days
+        # 其他信息，包括换手率，持股数等
+        self.info_series = info_series
     
         # 对benchmark进行同样的计算，暂时只管一个benchmark数据
         if not self.benchmark.empty:
@@ -69,9 +73,26 @@ class performance(object):
             # 第一个不为nan的数
             bench_base_value = self.benchmark[self.benchmark.notnull()].ix[0]
             self.net_benchmark = self.benchmark / bench_base_value
-            # 超额净值
+
+            # 超额净值，注意超额净值并不是账户净值减去基准净值，因为超额净值要考虑到策略在调仓日对基准份额的调整
+            # 超额净值的算法为，每个调仓周期之内的超额净值序列为exp（策略累计收益序列）- exp（基准累计收益序列）
+            # 不同调仓周期之间的净值为：这个调仓周期内的超额净值序列加上上一个调仓周期的最后一天的净值
             self.excess_net_value = self.net_account_value - self.net_benchmark
-            
+            return_data = pd.DataFrame({'log_return': self.log_return, 'log_return_bench': self.log_return_bench})
+            return_data['mark'] = self.holding_days.asof(return_data.index).replace(pd.tslib.NaT, account_value.index[0])
+            grouped = return_data.groupby('mark')
+            # 每个调仓周期内用周期内净值相减的方法
+            intra_holding = grouped.apply(lambda x:
+                np.exp(x['log_return'].cumsum()) - np.exp(x['log_return_bench'].cumsum())).reset_index(0, drop=True)
+            # 算每个调仓周期的最后一天的周期内净值
+            holding_node_value = grouped.apply(
+                lambda x: np.exp(x['log_return'].sum()) - np.exp(x['log_return_bench'].sum()))
+            # 此后的每个周期内的净值，都需要加上此前所有周期的最后一天的净值，注意首先需要shift一个调仓周期
+            # 因为每个调仓周期最后的净值，要到下一个周期内才加上
+            holding_node_value_cum = holding_node_value.shift(1).cumsum().fillna(0). \
+                reindex(intra_holding.index, method='ffill')
+            self.excess_net_value = holding_node_value_cum + intra_holding
+
             
     # 定义各种计算指标的函数，这里都用对数收益来计算
     
@@ -151,9 +172,13 @@ class performance(object):
                      'Anuual standard deviation of excess log return: {7:.2f}%\n' \
                      'Anuual information ratio: {8:.2f}\n' \
                      'Winning ratio: {9:.2f}%\n' \
+                     'Average turnover ratio: {10:.2f}%\n'\
+                     'Average number of stocks holding: {11:.2f}\n'\
                      'Stats END --------------------------------------------------------------------------\n'.format(
             annual_r*100, annual_std*100, annual_sharpe, max_dd*100, self.cum_log_return.index[peak_loc],
-            self.cum_log_return.index[low_loc], annual_ex_r*100, annual_ex_std*100, annual_info_ratio, win_ratio*100
+            self.cum_log_return.index[low_loc], annual_ex_r*100, annual_ex_std*100, annual_info_ratio, win_ratio*100,
+            self.info_series.ix[:, 'turnover_ratio'].replace(0, np.nan).mean()*100,
+            self.info_series.ix[:, 'holding_num'].mean()
         )
 
         print(target_str)
@@ -221,6 +246,16 @@ class performance(object):
             ax4.set_title('The Excess Net Value of The Strategy')
             plt.savefig(str(os.path.abspath('.')) + '/'+foldername+'/ActiveNetValue.png', dpi=1200)
             plt.savefig(pdfs, format='pdf')
+
+        # 第五张图画策略的持股数曲线
+        f5 = plt.figure()
+        ax5 = f5.add_subplot(1,1,1)
+        plt.plot(self.info_series.ix[:, 'holding_num'], 'b-')
+        ax5.set_xlabel('Time')
+        ax5.set_ylabel('Number of Stocks')
+        ax5.set_title('The Number of Stocks holding of The Strategy')
+        plt.savefig(str(os.path.abspath('.')) + '/'+foldername+'/NumStocksHolding.png', dpi=1200)
+        plt.savefig(pdfs, format='pdf')
 
             
             

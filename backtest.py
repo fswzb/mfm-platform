@@ -147,6 +147,10 @@ class backtest(object):
         self.account_value = []
         # 初始化计算业绩指标及作图用到的benchmark价值数据
         self.benchmark_value = self.bkt_data.benchmark_price.ix['ClosePrice', :, 0]
+        # 初始化其他信息序列，包括换手率，持有的股票数等
+        self.info_series = pd.DataFrame(0, index=self.cash.index, columns=['holding_value', 'sell_value',
+                                            'buy_value', 'trading_value', 'turnover_ratio', 'cost_value',
+                                            'holding_num'])
         
         # 暂时用一个警告的string初始化performance对象，防止提前调用此对象出错
         self.bkt_performance = 'The performance object of this backtest object has NOT been initialized, '\
@@ -196,8 +200,8 @@ class backtest(object):
                 self.execute_real_trading(curr_time, cursor, proj_vol_holding)
                 
         # 循环结束，开始计算持仓的序列
-        self.real_pct_position.holding_matrix = self.real_vol_position.holding_matrix.div(self.real_vol_position.holding_matrix.sum(1), 
-                                                                                         axis = 0)
+        self.real_pct_position.holding_matrix = self.real_vol_position.holding_matrix.apply(
+            lambda x: x if (x==0).all() else x.div(x.sum()), axis=1)
         
         # 计算账面的价值，注意，这里的账面价值没有加上资金中不能用于投资的部分（即1-trade_ratio那部分）
         self.account_value = (self.real_vol_position.holding_matrix * 100 * \
@@ -214,6 +218,9 @@ class backtest(object):
         benchmark_base_value = pd.Series(self.bkt_data.benchmark_price.ix['OpenPrice', 0, 0], 
                                          index = [base_time])
         self.benchmark_value = pd.concat([benchmark_base_value, self.benchmark_value])
+
+        # 计算每天的持股数
+        self.info_series['holding_num'] = (self.real_vol_position.holding_matrix>0).sum(1)
     
     # 单独处理回测的第一期，因为这一期没有cursor-1项
     def deal_with_first_day(self, curr_time, curr_tar_pct_holding):
@@ -290,14 +297,20 @@ class backtest(object):
         # 开始真正的交易，先卖后买
         # 首先，将上一期的持仓移动到这一期
         self.real_vol_position.holding_matrix.ix[cursor, :] = self.real_vol_position.holding_matrix.ix[cursor-1, :]
+
+        # 用调仓当天的开盘价来计算当天持有股票的价值，用这个价值来计算换手率
+        self.info_series.ix[cursor, 'holding_value'] = (self.real_vol_position.holding_matrix.ix[cursor, :] *\
+            self.bkt_data.stock_price.ix['OpenPrice_adj', cursor, :] * 100).sum()
                 
         # 处理卖出
         sell_plan = -(trade_plan.ix[trade_plan<0])
         # 有卖出
         if not sell_plan.empty:
+            # 卖出的股票的总额
+            self.info_series.ix[cursor, 'sell_value'] = (sell_plan * self.bkt_data.stock_price.ix['OpenPrice_adj',
+                cursor, :] * 100).sum()
             # 卖出后的资金
-            self.cash.ix[cursor] += (sell_plan * self.bkt_data.stock_price.ix['OpenPrice_adj', cursor, :] * \
-                                     100 * (1-self.sell_cost)).sum()
+            self.cash.ix[cursor] += self.info_series.ix[cursor, 'sell_value'] * (1-self.sell_cost)
             # 卖出后的持仓
             self.real_vol_position.subtract_holding(curr_time, sell_plan)
                 
@@ -308,32 +321,46 @@ class backtest(object):
             # 计算买入量的百分比，这是因为，有实际操作以及刚刚提到的交易费用的原因，计划的买入量和实际的买入量会不同，只能按比例买
             buy_plan_pct = buy_plan / buy_plan.sum()
             # 实际买入的量，用实际的现金，以buy_plan的比例买入股票
-            real_buy_vol = np.floor(self.cash.ix[cursor] * buy_plan_pct * (1-self.buy_cost) / \
+            real_buy_vol = np.floor(self.cash.ix[cursor] * buy_plan_pct / (1+self.buy_cost) /
                                     (self.bkt_data.stock_price.ix['OpenPrice_adj', cursor, :] * 100))
+            # 买入的股票的总额
+            self.info_series.ix[cursor, 'buy_value'] = (real_buy_vol *100 *
+                self.bkt_data.stock_price.ix['OpenPrice_adj', cursor, :]).sum()
             # 买入后的资金
-            self.cash.ix[cursor] -= (real_buy_vol / (1 - self.buy_cost) * 100 * \
-                                     self.bkt_data.stock_price.ix['OpenPrice_adj', cursor, :]).sum()
+            self.cash.ix[cursor] -= self.info_series.ix[cursor, 'buy_value'] * (1+self.buy_cost)
             # 买入后的持仓
             self.real_vol_position.add_holding(curr_time, real_buy_vol)
+
+        # 调仓后的持仓价值，同样用开盘价算出，这样可以计算交易成本的花费
+        new_holding_value = (self.real_vol_position.holding_matrix.ix[cursor, :] *\
+            self.bkt_data.stock_price.ix['OpenPrice_adj', cursor, :] * 100).sum()
+        self.info_series.ix[:, 'cost_value'] = self.info_series.ix[:, 'holding_value'] - new_holding_value
+        # 计算总交易额，以及换手率
+        self.info_series.ix[:, 'trading_value'] = self.info_series.ix[:, 'sell_value'] +\
+            self.info_series.ix[:, 'buy_value']
+        self.info_series.ix[:, 'turnover_ratio'] = self.info_series.ix[cursor, 'trading_value'] /\
+            self.info_series.ix[cursor, 'holding_value']
             
     # 仅仅初始化performance类，只得到净值和收益数据，而不输出指标和画图
     def initialize_performance(self):
-        self.bkt_performance = performance(self.account_value, benchmark = self.benchmark_value, 
-                                  risk_free_rate = self.risk_free_rate) 
+        holding_days = pd.Series(self.bkt_position.holding_matrix.index, index=self.bkt_position.holding_matrix.index)
+        holding_days = holding_days[self.bkt_start:self.bkt_end]
+        self.bkt_performance = performance(self.account_value, benchmark = self.benchmark_value,
+            info_series=self.info_series, risk_free_rate = self.risk_free_rate, holding_days=holding_days)
             
     # 计算回测得到的收益率数据，得到业绩指标以及绘图
-    def get_performance(self, *, foldername=''):
+    def get_performance(self, *, foldername='', pdfs='default'):
         # 初始化performance对象
         self.initialize_performance()
         
         # 计算和输出业绩指标
         self.bkt_performance.get_performance(foldername=foldername)
         # 画图
-        self.bkt_performance.plot_performance(foldername=foldername)
+        self.bkt_performance.plot_performance(foldername=foldername, pdfs=pdfs)
 
     # 利用回测得到的数据，或直接算出的数据进行业绩归因
     def get_performance_attribution(self, *, benchmark_weight='default', outside_bb='Empty', discard_factor=[],
-                                    show_warning=True, is_real_world=False, foldername=''):
+                                    show_warning=True, is_real_world=False, foldername='', pdfs='default'):
         if is_real_world:
             self.bkt_pa = performance_attribution(self.real_pct_position, benchmark_weight=benchmark_weight,
                                                   portfolio_returns=self.bkt_performance.log_return)
@@ -342,7 +369,7 @@ class backtest(object):
                                                   )
         self.bkt_pa.execute_performance_attribution(outside_bb=outside_bb, discard_factor=discard_factor,
                                                     show_warning=show_warning, foldername=foldername)
-        self.bkt_pa.plot_performance_attribution(foldername=foldername)
+        self.bkt_pa.plot_performance_attribution(foldername=foldername, pdfs=pdfs)
 
     # 重置回测每次执行回测要改变的数据，若想不创建新回测对象而改变回测参数，则需重置这些数据后才能再次执行回测
     def reset_bkt_data(self):
