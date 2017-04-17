@@ -200,8 +200,8 @@ class backtest(object):
                 self.execute_real_trading(curr_time, cursor, proj_vol_holding)
                 
         # 循环结束，开始计算持仓的序列
-        self.real_pct_position.holding_matrix = self.real_vol_position.holding_matrix.apply(
-            lambda x: x if (x==0).all() else x.div(x.sum()), axis=1)
+        self.real_pct_position.holding_matrix = self.real_vol_position.holding_matrix.mul(self.bkt_data.stock_price.\
+                                ix['ClosePrice_adj']).apply(lambda x: x if (x==0).all() else x.div(x.sum()), axis=1)
         
         # 计算账面的价值，注意，这里的账面价值没有加上资金中不能用于投资的部分（即1-trade_ratio那部分）
         self.account_value = (self.real_vol_position.holding_matrix * 100 * \

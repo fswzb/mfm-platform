@@ -43,14 +43,14 @@ def sf_test_multiple_pools(factor, *, direction='+', bb_obj='Empty', discard_fac
     temp_position = position(factor)
     # 先要初始化bkt对象
     bkt_obj = backtest(temp_position, bkt_start=bkt_start, bkt_end=bkt_end)
-#    # 建立bb对象，否则之后每次循环都要建立一次新的bb对象
-#    if bb_obj == 'Empty':
-#        bb_obj = barra_base()
-#        bb_obj.just_get_sytle_factor()
-#    # 外部传入的bb对象，要检测其股票池是否为all，如果不是all，则输出警告，因为可能丢失了数据
-#    elif bb_obj.bb_data.stock_pool != 'all':
-#        print('The stockpool of the barra_base obj from outside is NOT "all", be aware of possibile'
-#              'data loss due to this situation!\n')
+    # 建立bb对象，否则之后每次循环都要建立一次新的bb对象
+    if bb_obj == 'Empty':
+        bb_obj = barra_base()
+        bb_obj.just_get_sytle_factor()
+    # 外部传入的bb对象，要检测其股票池是否为all，如果不是all，则输出警告，因为可能丢失了数据
+    elif bb_obj.bb_data.stock_pool != 'all':
+        print('The stockpool of the barra_base obj from outside is NOT "all", be aware of possibile'
+              'data loss due to this situation!\n')
 
     # 根据股票池进行循环
     for stock_pool in stock_pools:
@@ -121,29 +121,38 @@ def sf_test_multiple_pools_parallel(factor, *, direction='+', bb_obj='Empty', di
 #         0.5*eps_fy1.rolling(252).std()/eps_fy1.rolling(252).mean()
 
 # 测试wq101中的因子
-wq_data = data.read_data(['ClosePrice_adj', 'OpenPrice_adj', 'Volume'],
-                         ['ClosePrice_adj', 'OpenPrice_adj', 'Volume'], shift=True)
-# 因子3
-f3_open_rank = wq_data.ix['OpenPrice_adj'].rank(1)
-f3_vol_rank = wq_data.ix['Volume'].rank(1)
-f3_open_rank_rolling = f3_open_rank.rolling(10)
-f3_vol_rank_rolling = f3_vol_rank.rolling(10)
-wq_f3 = -f3_open_rank_rolling.corr(f3_vol_rank_rolling)
+wq_data = data.read_data(['ClosePrice_adj', 'OpenPrice_adj', 'Volume', 'HighPrice', 'LowPrice', 'AdjustFactor'],
+                         ['ClosePrice_adj', 'OpenPrice_adj', 'Volume', 'HighPrice', 'LowPrice', 'AdjustFactor'],
+                         shift=True)
+# # 因子3
+# f3_open_rank = wq_data.ix['OpenPrice_adj'].rank(1)
+# f3_vol_rank = wq_data.ix['Volume'].rank(1)
+# f3_open_rank_rolling = f3_open_rank.rolling(10)
+# f3_vol_rank_rolling = f3_vol_rank.rolling(10)
+# wq_f3 = -f3_open_rank_rolling.corr(f3_vol_rank_rolling)
+#
+# # 因子2
+# f2_log_vol = np.log(wq_data.ix['Volume'])
+# f2_vol_rank_rolling = (f2_log_vol-f2_log_vol.shift(2)).rank(1).rolling(6)
+# f2_ret_rank_rolling = (wq_data.ix['ClosePrice_adj']/wq_data.ix['OpenPrice_adj']-1).rank(1).rolling(6)
+# wq_f2 = -f2_vol_rank_rolling.corr(f2_ret_rank_rolling)
 
-#因子2
-f2_log_vol = np.log(wq_data.ix['Volume'])
-f2_vol_rank_rolling = (f2_log_vol-f2_log_vol.shift(2)).rank(1).rolling(6)
-f2_ret_rank_rolling = (wq_data.ix['ClosePrice_adj']/wq_data.ix['OpenPrice_adj']-1).rank(1).rolling(6)
-wq_f2 = -f2_vol_rank_rolling.corr(f2_ret_rank_rolling)
+# 因子55
+wq_data['HighPrice_adj'] = wq_data['HighPrice'] * wq_data['AdjustFactor']
+wq_data['LowPrice_adj'] = wq_data['LowPrice'] * wq_data['AdjustFactor']
+high_rolling_max = wq_data.ix['HighPrice_adj'].rolling(12).max()
+low_rolling_min = wq_data.ix['LowPrice_adj'].rolling(12).min()
+rank_price = ((wq_data.ix['ClosePrice_adj']-low_rolling_min)/(high_rolling_max-low_rolling_min)).rank(1)
+rank_vol = wq_data.ix['Volume'].rank(1)
+wq_f55 = -rank_price.rolling(10).corr(rank_vol.rolling(10))
 
+sf_test_multiple_pools(factor=wq_f55, direction='+', bkt_start=pd.Timestamp('2009-03-03'),
+                         bkt_end=pd.Timestamp('2017-03-30'), stock_pools=['all'],
+                         do_bb_pure_factor=True, do_pa=True, select_method=0, do_active_pa=True)
 
-sf_test_multiple_pools(factor=wq_f3, direction='+', bkt_start=pd.Timestamp('2009-03-03'),
-                         bkt_end=pd.Timestamp('2017-03-30'), stock_pools=['zz500'],
-                         do_bb_pure_factor=False, do_pa=True, select_method=0, do_active_pa=True)
-
-# sf_test_multiple_pools_parallel(factor=wq_f3, direction='+', bkt_start=pd.Timestamp('2009-03-03'),
+# sf_test_multiple_pools_parallel(factor=wq_f55, direction='+', bkt_start=pd.Timestamp('2009-03-03'),
 #                            bkt_end=pd.Timestamp('2017-03-30'), stock_pools=['all', 'hs300', 'zz500', 'zz800'],
-#                            do_bb_pure_factor=False, do_pa=True, select_method=0, do_active_pa=False)
+#                            do_bb_pure_factor=True, do_pa=False, select_method=0, do_active_pa=False)
 
 
 

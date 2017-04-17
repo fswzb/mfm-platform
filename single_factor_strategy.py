@@ -533,12 +533,16 @@ class single_factor_strategy(strategy):
         # 回测、画图、归因
         bkt_obj.execute_backtest()
         bkt_obj.get_performance(foldername=stock_pool, pdfs=self.pdfs)
+
         # 如果要进行归因的话
         if do_pa:
             # 如果指定了要做超额收益的归因，且有股票池，则用相对基准的持仓来归因
             # 而股票池为全市场的不进行超额归因，如果要这样做，则可显式传入pa benchmark weight
             if do_active_pa and self.strategy_data.stock_pool != 'all':
                 pa_benchmark_weight = self.strategy_data.benchmark_price.ix['Weight_' + self.strategy_data.stock_pool]
+            elif do_active_pa and self.strategy_data.stock_pool == 'all':
+                temp_weight = data.read_data(['Weight_zz500'], ['Weight_zz500'])
+                pa_benchmark_weight = temp_weight['Weight_zz500']
             # 注意bb obj进行了一份深拷贝，这是因为在业绩归因的计算中，会根据不同的股票池丢弃数据，导致数据不全，因此不能传引用
             bkt_obj.get_performance_attribution(outside_bb=bb_obj, benchmark_weight=pa_benchmark_weight,
                                                 discard_factor=discard_factor, show_warning=False,
