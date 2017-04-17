@@ -359,11 +359,25 @@ class backtest(object):
         self.bkt_performance.plot_performance(foldername=foldername, pdfs=pdfs)
 
     # 利用回测得到的数据，或直接算出的数据进行业绩归因
+    # is_real_world为是否对回测出的模拟真实数据进行归因，real_world_type为0，为使用回测的策略对数收益率
+    # 为1，为使用策略的超额对数收益率（即对基准进行每日再平衡）， 为2，为使用策略超额净值计算出的超额收益率（即对基准进行调仓日再平衡）
+    # 如果不使用模拟的真实数据进行归因，则使用日收益数据直接计算组合收益率，这种情况下，如进行超额归因，则是对基准进行每日再平衡
     def get_performance_attribution(self, *, benchmark_weight='default', outside_bb='Empty', discard_factor=[],
-                                    show_warning=True, is_real_world=False, foldername='', pdfs='default'):
+                                    show_warning=True, is_real_world=False, real_world_type=0,
+                                    foldername='', pdfs='default'):
         if is_real_world:
-            self.bkt_pa = performance_attribution(self.real_pct_position, benchmark_weight=benchmark_weight,
-                                                  portfolio_returns=self.bkt_performance.log_return)
+            if real_world_type == 0:
+                self.bkt_pa = performance_attribution(self.real_pct_position, benchmark_weight=benchmark_weight,
+                                                      portfolio_returns=self.bkt_performance.log_return)
+            elif real_world_type == 1:
+                assert type(benchmark_weight) == str, 'No benchmark weight passed while executing pa on excess return!'
+                self.bkt_pa = performance_attribution(self.real_pct_position, benchmark_weight=benchmark_weight,
+                                                      portfolio_returns=self.bkt_performance.excess_return)
+            elif real_world_type == 2:
+                assert type(benchmark_weight) == str, 'No benchmark weight passed while executing pa on excess return!'
+                nv_return = np.log(self.bkt_performance.excess_net_value/self.excess_net_value.shift(1))
+                self.bkt_pa = performance_attribution(self.real_pct_position, benchmark_weight=benchmark_weight,
+                                                      portfolio_returns=nv_return)
         else:
             self.bkt_pa = performance_attribution(self.tar_pct_position, benchmark_weight=benchmark_weight,
                                                   )

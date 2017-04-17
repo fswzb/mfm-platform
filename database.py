@@ -90,7 +90,8 @@ class database(object):
     # 取ClosePrice_adj数据，将data中的panel数据index和columns都设置为ClosePrice_adj的index和columns
     # 先将所有的数据都取出来，之后不用再次从sq中取
     def get_ClosePrice_adj(self):
-        sql_query = "select TradingDay, SecuCode, AdjustClosePrice as ClosePrice_adj, AdjustOpenPrice as OpenPrice_adj, "\
+        sql_query = "select TradingDay, SecuCode, AdjustClosePrice as ClosePrice_adj, AdjustOpenPrice as OpenPrice_adj, " \
+                    "OpenPrice, HighPrice, LowPrice, ClosePrice, RatioAdjustFactor as AdjustFactor, "\
                     "TurnoverVolume as Volume, TotalShares as Shares, NonRestrictedShares as FreeShares, "\
                     "MarketCap as MarketValue, FloatMarketCap as FreeMarketValue, IndustryNameNew as Industry, "\
                     "IfSuspended as is_suspended "\
@@ -107,6 +108,18 @@ class database(object):
     def get_OpenPrice_adj(self):
         OpenPrice_adj = self.sq_data.pivot_table(index='TradingDay', columns='SecuCode', values='OpenPrice_adj')
         self.data.stock_price['OpenPrice_adj'] = OpenPrice_adj
+
+    # 取open，close， high， low的价格数据
+    def get_ochl(self):
+        ochl = ['OpenPrice', 'ClosePrice', 'HighPrice', 'LowPrice']
+        for data_name in ochl:
+            curr_data = self.sq_data.pivot_table(index='TradingDay', columns='SecuCode', values=data_name)
+            self.data.stock_price[data_name] = curr_data
+
+    # 取Adjust Factor
+    def get_AdjustFactor(self):
+        AdjustFactor = self.sq_data.pivot_table(index='TradingDay', columns='SecuCode', values='AdjustFactor')
+        self.data.stock_price['AdjustFactor'] = AdjustFactor
 
     # 取volumne
     def get_Volume(self):
@@ -427,8 +440,10 @@ class database(object):
         self.initialize_gg()
         self.get_trading_days()
         self.get_labels()
-#        self.get_ClosePrice_adj()
+        self.get_ClosePrice_adj()
 #        self.get_OpenPrice_adj()
+        self.get_ochl()
+        self.get_AdjustFactor()
 #        self.get_Volume()
 #        self.get_total_and_free_mv()
 #        self.get_total_and_free_shares()
@@ -451,7 +466,7 @@ class database(object):
 #        self.get_ni_revenue_eps_growth()
 #        print('get growth ttm has been completed.../n')
 #        self.get_index_price()
-        self.get_index_weight(first_date=update_time)
+#        self.get_index_weight(first_date=update_time)
 #        print('get index data has been completed.../n')
 #
 #        # 更新数据的情况先不能储存数据，只有非更新的情况才能储存
@@ -478,7 +493,8 @@ class database(object):
         self.get_data_from_db(update_time=self.start_date)
 
         # 读取以前的老数据
-        stock_price_name_list = ['ClosePrice_adj', 'OpenPrice_adj', 'Volume', 'Shares', 'FreeShares',
+        stock_price_name_list = ['ClosePrice_adj', 'OpenPrice_adj', 'OpenPrice', 'ClosePrice', 'HighPrice',
+                                 'LowPrice', 'AdjustFactor', 'Volume', 'Shares', 'FreeShares',
                                  'MarketValue', 'FreeMarketValue']
         raw_data_name_list = ['Industry', 'TotalAssets', 'TotalLiability', 'TotalEquity', 'PB', 'NetIncome_fy1',
                               'NetIncome_fy2', 'EPS_fy1', 'EPS_fy2', 'CashEarnings_ttm', 'NetIncome_ttm',
