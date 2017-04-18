@@ -28,7 +28,7 @@ from barra_base import barra_base
 from single_factor_strategy import single_factor_strategy
 
 # 根据多个股票池进行一次完整的单因子测试
-def sf_test_multiple_pools(factor, *, direction='+', bb_obj='Empty', discard_factor=[],
+def sf_test_multiple_pools(factor, *, direction='+', bb_obj='Empty', discard_factor=[], holding_freq='m',
                            stock_pools=['all', 'hs300', 'zz500', 'zz800'], bkt_start='default', bkt_end='default',
                            do_bb_pure_factor=False, do_pa=False, select_method=0, do_active_pa=False):
     # 如果传入的是str，则读取同名文件，如果是dataframe，则直接传入因子
@@ -42,7 +42,7 @@ def sf_test_multiple_pools(factor, *, direction='+', bb_obj='Empty', discard_fac
     # 初始化一个持仓对象，以用来初始化backtest对象，索引以factor为标准
     temp_position = position(factor)
     # 先要初始化bkt对象
-    bkt_obj = backtest(temp_position, bkt_start=bkt_start, bkt_end=bkt_end)
+    bkt_obj = backtest(temp_position, bkt_start=bkt_start, bkt_end=bkt_end, sell_cost=0, buy_cost=0)
     # 建立bb对象，否则之后每次循环都要建立一次新的bb对象
     if bb_obj == 'Empty':
         bb_obj = barra_base()
@@ -62,7 +62,7 @@ def sf_test_multiple_pools(factor, *, direction='+', bb_obj='Empty', discard_fac
         # 对bkt obj做了同样的处理，尽管这里并不是必要的
         curr_sf.single_factor_test(factor=factor, direction=direction, bkt_obj=copy.deepcopy(bkt_obj),
                                    bb_obj=copy.deepcopy(bb_obj), discard_factor=discard_factor,
-                                   bkt_start=bkt_start, bkt_end=bkt_end,
+                                   bkt_start=bkt_start, bkt_end=bkt_end, holding_freq=holding_freq,
                                    stock_pool=stock_pool, do_pa=do_pa, do_bb_pure_factor=do_bb_pure_factor,
                                    select_method=select_method, do_active_pa=do_active_pa)
 
@@ -70,7 +70,7 @@ def sf_test_multiple_pools(factor, *, direction='+', bb_obj='Empty', discard_fac
 def sf_test_multiple_pools_parallel(factor, *, direction='+', bb_obj='Empty', discard_factor=[],
                                     stock_pools=['all', 'hs300', 'zz500', 'zz800'], bkt_start='default',
                                     bkt_end='default', do_bb_pure_factor=False, do_pa=False,
-                                    select_method=0, do_active_pa=False):
+                                    select_method=0, do_active_pa=False, holding_freq='m'):
     # 如果传入的是str，则读取同名文件，如果是dataframe，则直接传入因子
     # 注意：这里的因子数据并不储存到self.strategy_data.factor中，因为循环股票池会丢失数据
     # 这里实际上是希望每次循环都有一个新的single factor strategy对象，
@@ -101,7 +101,7 @@ def sf_test_multiple_pools_parallel(factor, *, direction='+', bb_obj='Empty', di
         curr_sf.single_factor_test(factor=factor, stock_pool=stock_pool, direction=direction,
                                    bkt_obj=copy.deepcopy(bkt_obj), bb_obj=copy.deepcopy(bb_obj),
                                    discard_factor=discard_factor, bkt_start=bkt_start, bkt_end=bkt_end,
-                                   do_pa=do_pa, do_bb_pure_factor=do_bb_pure_factor,
+                                   do_pa=do_pa, do_bb_pure_factor=do_bb_pure_factor, holding_freq=holding_freq,
                                    select_method=select_method, do_active_pa=do_active_pa)
 
     from multiprocessing import Process
@@ -146,7 +146,7 @@ rank_price = ((wq_data.ix['ClosePrice_adj']-low_rolling_min)/(high_rolling_max-l
 rank_vol = wq_data.ix['Volume'].rank(1)
 wq_f55 = -rank_price.rolling(10).corr(rank_vol.rolling(10))
 
-sf_test_multiple_pools(factor=wq_f55, direction='+', bkt_start=pd.Timestamp('2009-03-03'),
+sf_test_multiple_pools(factor=wq_f55, direction='+', bkt_start=pd.Timestamp('2009-03-03'), holding_freq='w',
                          bkt_end=pd.Timestamp('2017-03-30'), stock_pools=['all'],
                          do_bb_pure_factor=True, do_pa=True, select_method=0, do_active_pa=True)
 

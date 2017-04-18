@@ -449,7 +449,7 @@ class single_factor_strategy(strategy):
     # select method为单因子测试策略的选股方式，0为按比例选股，1为分行业按比例选股
     def single_factor_test(self, *, factor, direction='+', bkt_obj='Empty', bb_obj='Empty', pa_benchmark_weight='default',
                            discard_factor=[], bkt_start='default', bkt_end='default', stock_pool='all', do_pa=True,
-                           do_bb_pure_factor=False, select_method=0, do_active_pa=False):
+                           do_bb_pure_factor=False, select_method=0, do_active_pa=False, holding_freq='m'):
         # 如果传入的是str，则读取同名文件，如果是dataframe，则直接传入因子
         if type(factor) == str:
             self.read_factor_data([factor], [factor], shift=True)
@@ -460,7 +460,7 @@ class single_factor_strategy(strategy):
 
         # 生成调仓日
         if self.holding_days.empty:
-            self.generate_holding_days(holding_freq='w')
+            self.generate_holding_days(holding_freq=holding_freq)
         # 初始化持仓或重置策略持仓
         if self.position.holding_matrix.empty:
             self.initialize_position(self.strategy_data.factor.ix[0, self.holding_days, :])
@@ -546,7 +546,8 @@ class single_factor_strategy(strategy):
             # 注意bb obj进行了一份深拷贝，这是因为在业绩归因的计算中，会根据不同的股票池丢弃数据，导致数据不全，因此不能传引用
             bkt_obj.get_performance_attribution(outside_bb=bb_obj, benchmark_weight=pa_benchmark_weight,
                                                 discard_factor=discard_factor, show_warning=False,
-                                                foldername=stock_pool, pdfs=self.pdfs)
+                                                foldername=stock_pool, pdfs=self.pdfs, is_real_world=True,
+                                                real_world_type=2)
 
         # 画单因子组合收益率
         self.get_factor_return(weights=np.sqrt(self.strategy_data.stock_price.ix['FreeMarketValue']),

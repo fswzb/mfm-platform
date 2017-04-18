@@ -370,12 +370,12 @@ class backtest(object):
                 self.bkt_pa = performance_attribution(self.real_pct_position, benchmark_weight=benchmark_weight,
                                                       portfolio_returns=self.bkt_performance.log_return)
             elif real_world_type == 1:
-                assert type(benchmark_weight) == str, 'No benchmark weight passed while executing pa on excess return!'
+                assert type(benchmark_weight) != str, 'No benchmark weight passed while executing pa on excess return!'
                 self.bkt_pa = performance_attribution(self.real_pct_position, benchmark_weight=benchmark_weight,
                                                       portfolio_returns=self.bkt_performance.excess_return)
             elif real_world_type == 2:
-                assert type(benchmark_weight) == str, 'No benchmark weight passed while executing pa on excess return!'
-                nv_return = np.log(self.bkt_performance.excess_net_value/self.excess_net_value.shift(1))
+                assert type(benchmark_weight) != str, 'No benchmark weight passed while executing pa on excess return!'
+                nv_return = np.log(self.bkt_performance.excess_net_value/self.bkt_performance.excess_net_value.shift(1))
                 self.bkt_pa = performance_attribution(self.real_pct_position, benchmark_weight=benchmark_weight,
                                                       portfolio_returns=nv_return)
         else:

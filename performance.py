@@ -77,7 +77,6 @@ class performance(object):
             # 超额净值，注意超额净值并不是账户净值减去基准净值，因为超额净值要考虑到策略在调仓日对基准份额的调整
             # 超额净值的算法为，每个调仓周期之内的超额净值序列为exp（策略累计收益序列）- exp（基准累计收益序列）
             # 不同调仓周期之间的净值为：这个调仓周期内的超额净值序列加上上一个调仓周期的最后一天的净值
-            self.excess_net_value = self.net_account_value - self.net_benchmark
             return_data = pd.DataFrame({'log_return': self.log_return, 'log_return_bench': self.log_return_bench})
             return_data['mark'] = self.holding_days.asof(return_data.index).replace(pd.tslib.NaT, account_value.index[0])
             grouped = return_data.groupby('mark')
@@ -92,6 +91,7 @@ class performance(object):
             holding_node_value_cum = holding_node_value.shift(1).cumsum().fillna(0). \
                 reindex(intra_holding.index, method='ffill')
             self.excess_net_value = holding_node_value_cum + intra_holding
+            self.excess_net_value += 1
 
             
     # 定义各种计算指标的函数，这里都用对数收益来计算
