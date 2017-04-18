@@ -77,7 +77,7 @@ class position(object):
     def to_percentage(self):
         # 注意如果一期持仓全是0，则不改动
         self.holding_matrix = self.holding_matrix.apply(lambda x:x if (x==0).all() else
-                                                        x.div(x.sum()), axis=1)
+                                                        x.div(x.abs().sum()), axis=1)
         # 防止无持仓的变成nan
         self.holding_matrix[self.holding_matrix.isnull()] = 0
         

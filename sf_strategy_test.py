@@ -42,7 +42,7 @@ def sf_test_multiple_pools(factor, *, direction='+', bb_obj='Empty', discard_fac
     # 初始化一个持仓对象，以用来初始化backtest对象，索引以factor为标准
     temp_position = position(factor)
     # 先要初始化bkt对象
-    bkt_obj = backtest(temp_position, bkt_start=bkt_start, bkt_end=bkt_end, sell_cost=0, buy_cost=0)
+    bkt_obj = backtest(temp_position, bkt_start=bkt_start, bkt_end=bkt_end)
     # 建立bb对象，否则之后每次循环都要建立一次新的bb对象
     if bb_obj == 'Empty':
         bb_obj = barra_base()
@@ -148,7 +148,7 @@ wq_f55 = -rank_price.rolling(10).corr(rank_vol.rolling(10))
 
 sf_test_multiple_pools(factor=wq_f55, direction='+', bkt_start=pd.Timestamp('2009-03-03'), holding_freq='w',
                          bkt_end=pd.Timestamp('2017-03-30'), stock_pools=['all'],
-                         do_bb_pure_factor=True, do_pa=True, select_method=0, do_active_pa=True)
+                         do_bb_pure_factor=False, do_pa=True, select_method=2, do_active_pa=False)
 
 # sf_test_multiple_pools_parallel(factor=wq_f55, direction='+', bkt_start=pd.Timestamp('2009-03-03'),
 #                            bkt_end=pd.Timestamp('2017-03-30'), stock_pools=['all', 'hs300', 'zz500', 'zz800'],

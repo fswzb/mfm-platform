@@ -161,6 +161,50 @@ class single_factor_strategy(strategy):
                                            benchmark_price.ix['Weight_'+self.strategy_data.stock_pool,
                                                               self.position.holding_matrix.index, :])
         pass
+
+    # 用优化的方法构造纯因子组合，纯因子组合保证组合在该因子上有暴露（注意，并不一定是1），在其他因子上无暴露
+    # 当优化方法中的方差矩阵为回归权重的逆矩阵时，优化方法和回归方法得到一样的权重（见Barra, efficient replication of factor returns），
+    # 这时这里的结果和用回归计算的正交化提纯后的因子的因子收益一样，但是把它做成策略可以放到回测中进行回测，
+    # 从而可以考虑交易成本和实际情况。注意：这里先做因子相对barra base的纯因子组合，之后可添加相对任何因子的
+    # 这里先做一个简单的直接用解析解算出的组合
+    def select_stocks_pure_factor_bb(self, *, bb_expo, cov_matrix='Empty', reg_weight='Empty', direction='+',
+                                     regulation_lambda=1):
+        # 计算因子值的暴露
+        factor_expo = strategy_data.get_cap_wgt_exposure(self.strategy_data.factor.iloc[0],
+                                                         self.strategy_data.stock_price.ix['FreeMarketValue'])
+        if direction == '-':
+            factor_expo = - factor_expo
+        self.strategy_data.factor_expo = pd.Panel({'factor_expo':factor_expo},
+                major_axis=self.strategy_data.factor.major_axis, minor_axis=self.strategy_data.factor.minor_axis)
+
+        # 循环调仓日
+        for cursor, time in self.holding_days.iteritems():
+            # 当前的因子暴露向量，为n*1
+            x_alpha = self.strategy_data.factor_expo.ix['factor_expo', time, :].fillna(0)
+            # 当前的其他因子暴露向量，为n*(k-1)，实际就是barra base因子的暴露
+            x_sigma = bb_expo.ix[:, time, :].fillna(0)
+
+            # 有协方差矩阵，优先用协方差矩阵
+            if type(cov_matrix) != str:
+                inv_v = np.linalg.pinv(cov_matrix.ix[time].fillna(0))
+            else:
+                assert type(reg_weight) != str, 'The construction of pure factor portfolio require one of following:\n' \
+                                                'Covariance matrix of factor returns (priority), OR \n' \
+                                                'Regression weight when getting factor return using linear regression.\n'
+                # 取当期的回归权重，每只股票的权重在对角线上
+                inv_v = np.diag(reg_weight.ix[time].fillna(0))
+
+            # 通过优化的解析解计算权重，解析解公式见barra, Efficient Replication of Factor Returns, equation (6)
+            temp_1 = np.linalg.pinv(np.dot(np.dot(x_sigma.T, inv_v), x_sigma))
+            temp_2 = np.dot(np.dot(x_sigma.T, inv_v), x_alpha)
+            temp_3 = x_alpha - np.dot(np.dot(x_sigma, temp_1), temp_2)
+            h_star = 1/regulation_lambda * np.dot(inv_v, temp_3)
+
+            # 加权方式只能为这一种，只是需要归一化一下
+            self.position.holding_matrix.ix[time] = h_star
+
+        self.position.to_percentage()
+        pass
     
     # 单因子的因子收益率计算和检验，用来判断因子有效性，
     # holding_freq为回归收益的频率，默认为月，可调整为与调仓周期一样，也可不同
@@ -503,7 +547,7 @@ class single_factor_strategy(strategy):
             lag_bb_expo_no_cf = lag_bb_expo.drop('country_factor', axis=0)
             # 利用多元线性回归进行提纯
             pure_factor_expo = strategy_data.simple_orth_gs(factor_expo, lag_bb_expo_no_cf, weights=
-                                                            self.strategy_data.stock_price.ix['FreeMarketValue'],
+                                                            np.sqrt(self.strategy_data.stock_price.ix['FreeMarketValue']),
                                                             add_constant=False)
             # 将得到的纯化因子放入因子值中储存
             self.strategy_data.factor.iloc[0] = pure_factor_expo
@@ -514,6 +558,18 @@ class single_factor_strategy(strategy):
         elif select_method == 1:
             # 分行业选股
             self.select_stocks_within_indus(weight=2, direction=direction)
+        elif select_method ==2:
+            # 用构造纯因子组合的方法选股
+            # 首先和计算纯因子一样，要计算bb因子的暴露
+            if bb_obj.bb_data.factor_expo.empty:
+                bb_obj.just_get_factor_expo()
+            # 同样需要lag
+            lag_bb_expo = bb_obj.bb_data.factor_expo.shift(1).reindex(major_axis=bb_obj.bb_data.factor_expo.major_axis)
+            # 同样不能有country factor
+            lag_bb_expo_no_cf = lag_bb_expo.drop('country_factor', axis=0)
+            # 构造纯因子组合，权重使用回归权重，即市值的根号
+            self.select_stocks_pure_factor_bb(bb_expo=lag_bb_expo_no_cf, reg_weight=np.sqrt(
+                self.strategy_data.stock_price.ix['FreeMarketValue']), direction=direction)
 
         # 如果有外来的backtest对象，则使用这个backtest对象，如果没有，则需要自己建立，同时传入最新持仓
         if bkt_obj == 'Empty':
@@ -546,7 +602,7 @@ class single_factor_strategy(strategy):
             # 注意bb obj进行了一份深拷贝，这是因为在业绩归因的计算中，会根据不同的股票池丢弃数据，导致数据不全，因此不能传引用
             bkt_obj.get_performance_attribution(outside_bb=bb_obj, benchmark_weight=pa_benchmark_weight,
                                                 discard_factor=discard_factor, show_warning=False,
-                                                foldername=stock_pool, pdfs=self.pdfs, is_real_world=True,
+                                                foldername=stock_pool, pdfs=self.pdfs, is_real_world=False,
                                                 real_world_type=2)
 
         # 画单因子组合收益率
