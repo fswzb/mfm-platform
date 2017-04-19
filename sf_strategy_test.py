@@ -146,9 +146,9 @@ rank_price = ((wq_data.ix['ClosePrice_adj']-low_rolling_min)/(high_rolling_max-l
 rank_vol = wq_data.ix['Volume'].rank(1)
 wq_f55 = -rank_price.rolling(10).corr(rank_vol.rolling(10))
 
-sf_test_multiple_pools(factor=wq_f55, direction='+', bkt_start=pd.Timestamp('2009-03-03'), holding_freq='w',
+sf_test_multiple_pools(factor=wq_f55, direction='+', bkt_start=pd.Timestamp('2009-03-06'), holding_freq='w',
                          bkt_end=pd.Timestamp('2017-03-30'), stock_pools=['all'],
-                         do_bb_pure_factor=False, do_pa=True, select_method=2, do_active_pa=False)
+                         do_bb_pure_factor=False, do_pa=True, select_method=2, do_active_pa=True)
 
 # sf_test_multiple_pools_parallel(factor=wq_f55, direction='+', bkt_start=pd.Timestamp('2009-03-03'),
 #                            bkt_end=pd.Timestamp('2017-03-30'), stock_pools=['all', 'hs300', 'zz500', 'zz800'],

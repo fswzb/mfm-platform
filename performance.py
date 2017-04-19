@@ -90,8 +90,11 @@ class performance(object):
             # 因为每个调仓周期最后的净值，要到下一个周期内才加上
             holding_node_value_cum = holding_node_value.shift(1).cumsum().fillna(0). \
                 reindex(intra_holding.index, method='ffill')
-            self.excess_net_value = holding_node_value_cum + intra_holding
-            self.excess_net_value += 1
+            self.excess_net_account_value = holding_node_value_cum + intra_holding
+            self.excess_net_account_value += 1
+            # 计算用超额净值得到的超额收益序列，用这个序列来计算超额收益的统计量，更符合实际
+            self.excess_nv_return = np.log(self.excess_net_account_value/self.excess_net_account_value.shift(1))
+            self.cum_excess_nv_return = self.excess_nv_return.cumsum()
 
             
     # 定义各种计算指标的函数，这里都用对数收益来计算
@@ -132,12 +135,12 @@ class performance(object):
     
     # 年化超额收益
     def annual_excess_return(self):
-        return self.cum_excess_return.ix[-1] * self.tradedays_one_year / \
-               (self.cum_excess_return.size - 1) 
+        return self.cum_excess_nv_return.ix[-1] * self.tradedays_one_year / \
+               (self.cum_excess_nv_return.size - 1)
                
     # 年化超额收益波动率
     def annual_excess_std(self):
-        return self.excess_return.std() * np.sqrt(self.tradedays_one_year)
+        return self.excess_nv_return.std() * np.sqrt(self.tradedays_one_year)
         
     # 年化信息比
     def info_ratio(self, annual_excess_return, annual_excess_std):
@@ -145,8 +148,8 @@ class performance(object):
         
     # 胜率
     def win_ratio(self):
-        return self.excess_return.ix[self.excess_return>0].size / \
-               self.excess_return.size
+        return self.excess_nv_return.ix[self.excess_nv_return>0].size / \
+               self.excess_nv_return.size
         
     # 计算并输出各个指标
     def get_performance(self, *, foldername=''):
@@ -158,25 +161,30 @@ class performance(object):
         annual_ex_r = self.annual_excess_return()
         annual_ex_std = self.annual_excess_std()
         annual_info_ratio = self.info_ratio(annual_ex_r, annual_ex_std)
+        max_dd_ex, peak_loc_ex, low_loc_ex = performance.max_drawdown(self.excess_net_account_value)
         win_ratio = self.win_ratio()
 
         # 输出指标
         target_str = 'Stats START ------------------------------------------------------------------------\n' \
-                     'The stats of the strategy (and its performance agianst benchmark) is as follows:\n' \
+                     'The stats of the strategy (and its performance against benchmark) is as follows:\n' \
                      'Annual log return: {0:.2f}%\n' \
                      'Annual standard deviation of log return: {1:.2f}%\n' \
-                     'Anuual Sharpe ratio: {2:.2f}\n' \
-                     'Max Drawdown: {3:.2f}%\n' \
-                     'Max Drawdown happened between {4} and {5}\n' \
-                     'Anuual excess log return: {6:.2f}%\n' \
-                     'Anuual standard deviation of excess log return: {7:.2f}%\n' \
-                     'Anuual information ratio: {8:.2f}\n' \
-                     'Winning ratio: {9:.2f}%\n' \
-                     'Average turnover ratio: {10:.2f}%\n'\
-                     'Average number of stocks holding: {11:.2f}\n'\
+                     'Annual Sharpe ratio: {2:.2f}\n' \
+                     'Max drawdown: {3:.2f}%\n' \
+                     'Max drawdown happened between {4} and {5}\n' \
+                     'Annual excess log return: {6:.2f}%\n' \
+                     'Annual standard deviation of excess log return: {7:.2f}%\n' \
+                     'Annual information ratio: {8:.2f}\n' \
+                     'Max drawdown of excess account value: {9:.2f}%\n' \
+                     'Max drawdown happened between {10} and {11}\n' \
+                     'Winning ratio: {12:.2f}%\n' \
+                     'Average turnover ratio: {13:.2f}%\n'\
+                     'Average number of stocks holding: {14:.2f}\n'\
                      'Stats END --------------------------------------------------------------------------\n'.format(
             annual_r*100, annual_std*100, annual_sharpe, max_dd*100, self.cum_log_return.index[peak_loc],
-            self.cum_log_return.index[low_loc], annual_ex_r*100, annual_ex_std*100, annual_info_ratio, win_ratio*100,
+            self.cum_log_return.index[low_loc], annual_ex_r*100, annual_ex_std*100, annual_info_ratio,
+            max_dd_ex*100, self.cum_log_return.index[peak_loc_ex], self.cum_log_return.index[low_loc_ex],
+            win_ratio*100,
             self.info_series.ix[:, 'turnover_ratio'].replace(0, np.nan).mean()*100,
             self.info_series.ix[:, 'holding_num'].mean()
         )
@@ -240,7 +248,7 @@ class performance(object):
         if not self.benchmark.empty:
             f4 = plt.figure()
             ax4 = f4.add_subplot(1,1,1)
-            plt.plot(self.excess_net_value, 'b-')
+            plt.plot(self.excess_net_account_value, 'b-')
             ax4.set_xlabel('Time')
             ax4.set_ylabel('Excess Net Value')
             ax4.set_title('The Excess Net Value of The Strategy')

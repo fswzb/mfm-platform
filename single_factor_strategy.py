@@ -15,6 +15,7 @@ import os
 import statsmodels.api as sm
 import copy
 from matplotlib.backends.backend_pdf import PdfPages
+from cvxopt import solvers, matrix
 
 from data import data
 from strategy_data import strategy_data
@@ -192,7 +193,10 @@ class single_factor_strategy(strategy):
                                                 'Covariance matrix of factor returns (priority), OR \n' \
                                                 'Regression weight when getting factor return using linear regression.\n'
                 # 取当期的回归权重，每只股票的权重在对角线上
-                inv_v = np.diag(reg_weight.ix[time].fillna(0))
+                # inv_v = np.diag(reg_weight.ix[time].fillna(0))
+                curr_weight = reg_weight.ix[time]
+                curr_weight = (curr_weight/curr_weight.sum()).fillna(0)
+                inv_v = np.diag(curr_weight)
 
             # 通过优化的解析解计算权重，解析解公式见barra, Efficient Replication of Factor Returns, equation (6)
             temp_1 = np.linalg.pinv(np.dot(np.dot(x_sigma.T, inv_v), x_sigma))
@@ -205,6 +209,115 @@ class single_factor_strategy(strategy):
 
         self.position.to_percentage()
         pass
+
+    # 上一种选股方法的优化解法
+    def select_stocks_pure_factor(self, *, base_expo, cov_matrix='Empty', reg_weight='Empty', direction='+',
+                                  benchmark_weight='Empty', is_long_only=True):
+        # 计算因子值的暴露
+        factor_expo = strategy_data.get_cap_wgt_exposure(self.strategy_data.factor.iloc[0],
+                                                         self.strategy_data.stock_price.ix['FreeMarketValue'])
+        if direction == '-':
+            factor_expo = - factor_expo
+        self.strategy_data.factor_expo = pd.Panel({'factor_expo': factor_expo},
+                                                  major_axis=self.strategy_data.factor.major_axis,
+                                                  minor_axis=self.strategy_data.factor.minor_axis)
+        # 如果有benchmark，则计算benchmark的暴露
+        if type(benchmark_weight) != str:
+            benchmark_weight = (benchmark_weight.div(benchmark_weight.sum(1), axis=0)).fillna(0)
+            benchmark_base_expo = np.einsum('ijk,jk->ji', base_expo.fillna(0), benchmark_weight.fillna(0))
+            benchmark_base_expo = pd.DataFrame(benchmark_base_expo, index=base_expo.major_axis, columns=base_expo.items)
+            # 而且当前因子暴露要设置为相对benchmark的暴露
+            benchmark_curr_factor_expo = (factor_expo * benchmark_weight).sum(1)
+            self.strategy_data.factor_expo.ix['factor_expo'] = factor_expo.sub(benchmark_curr_factor_expo, axis=0)
+
+        # 循环调仓日
+        for cursor, time in self.holding_days.iteritems():
+            curr_factor_expo = self.strategy_data.factor_expo.ix['factor_expo', time, :]
+            curr_base_expo = base_expo.ix[:, time, :]
+
+            # 有协方差矩阵，优先用协方差矩阵
+            if type(cov_matrix) != str:
+                curr_v = cov_matrix.ix[time]
+                curr_v_diag = curr_v.diagonal()
+                # 去除有nan的数据
+                all_data = pd.concat([curr_v_diag, curr_factor_expo, curr_base_expo], axis=1)
+                all_data = all_data.dropna()
+                # 如果有效数据小于等于1，当期不选股票
+                if all_data.shape[0] <= 1:
+                    continue
+                # 指数中选股可能会出现一个行业暴露全是0的情况，所以关于这个行业的限制条件会冗余，于是要进行剔除
+                all_data = all_data.replace(0, np.nan).dropna(axis=1, how='all').fillna(0.0)
+                curr_factor_expo = all_data.ix[:, 0]
+                curr_v_diag = all_data.ix[:, 1]
+                curr_base_expo = all_data.ix[:, 2:]
+                curr_v = curr_v.reindex(index=curr_v_diag.index, columns=curr_v_diag.index)
+            else:
+                assert type(reg_weight) != str, 'The construction of pure factor portfolio require one of following:\n' \
+                                                'Covariance matrix of factor returns (priority), OR \n' \
+                                                'Regression weight when getting factor return using linear regression.\n'
+                # 取当期的回归权重，每只股票的权重在对角线上
+                curr_v_diag = reg_weight.ix[time]
+                # 去除有nan的数据
+                all_data = pd.concat([curr_v_diag, curr_factor_expo, curr_base_expo], axis=1)
+                all_data = all_data.dropna()
+                # 如果有效数据小于等于1，当期不选股票
+                if all_data.shape[0] <= 1:
+                    continue
+                # 指数中选股可能会出现一个行业暴露全是0的情况，所以关于这个行业的限制条件会冗余，于是要进行剔除
+                all_data = all_data.replace(0, np.nan).dropna(axis=1, how='all').fillna(0.0)
+                curr_v_diag = all_data.ix[:, 0]
+                curr_factor_expo = all_data.ix[:, 1]
+                curr_base_expo = all_data.ix[:, 2:]
+                # 将回归权重归一化
+                curr_v_diag = curr_v_diag / curr_v_diag.sum()
+                curr_v = np.linalg.pinv(np.diag(curr_v_diag))
+                curr_v = pd.DataFrame(curr_v, index=curr_factor_expo.index, columns=curr_factor_expo.index)
+
+            # 设置其他因子为0的限制条件，在有基准的时候，设置为基准的暴露
+            if type(benchmark_weight) != str:
+                expo_target = benchmark_base_expo.ix[time].reindex(index=curr_base_expo.columns)
+            else:
+                expo_target = pd.Series(0.0, index=curr_base_expo.columns)
+
+            # 开始设置优化
+            # P = V
+            P = matrix(curr_v.as_matrix())
+            # q = - (factor_expo.T)
+            q = matrix(-curr_factor_expo.as_matrix().transpose())
+
+            # 其他因为暴露为0，或等于基准的限制条件
+            A = matrix(curr_base_expo.as_matrix().transpose())
+            b = matrix(expo_target.as_matrix())
+
+            solvers.options['show_progress'] = False
+
+            # 如果只能做多，则每只股票的比例都必须大于等于0
+            if is_long_only:
+                long_only_constraint = pd.DataFrame(-1.0*np.eye(curr_factor_expo.size), index=curr_factor_expo.index,
+                                                   columns=curr_factor_expo.index)
+                long_only_target = pd.Series(0.0, index=curr_factor_expo.index)
+
+                G = matrix(long_only_constraint.as_matrix())
+                h = matrix(long_only_target.as_matrix())
+
+                # 解优化问题
+                results = solvers.qp(P=P, q=q, A=A, b=b, G=G,  h=h)
+            else:
+                results = solvers.qp(P=P, q=q, A=A, b=b)
+
+            results_np = np.array(results['x']).squeeze()
+            results_s = pd.Series(results_np, index=curr_factor_expo.index)
+            # 重索引为所有股票代码
+            results_s = results_s.reindex(self.strategy_data.stock_price.minor_axis, fill_value=0)
+
+            # 股票持仓
+            self.position.holding_matrix.ix[time] = results_s
+
+        # 循环结束后，进行权重归一化
+        self.position.to_percentage()
+        pass
+
+
     
     # 单因子的因子收益率计算和检验，用来判断因子有效性，
     # holding_freq为回归收益的频率，默认为月，可调整为与调仓周期一样，也可不同
@@ -567,9 +680,13 @@ class single_factor_strategy(strategy):
             lag_bb_expo = bb_obj.bb_data.factor_expo.shift(1).reindex(major_axis=bb_obj.bb_data.factor_expo.major_axis)
             # 同样不能有country factor
             lag_bb_expo_no_cf = lag_bb_expo.drop('country_factor', axis=0)
-            # 构造纯因子组合，权重使用回归权重，即市值的根号
-            self.select_stocks_pure_factor_bb(bb_expo=lag_bb_expo_no_cf, reg_weight=np.sqrt(
-                self.strategy_data.stock_price.ix['FreeMarketValue']), direction=direction)
+            # # 构造纯因子组合，权重使用回归权重，即市值的根号
+            # self.select_stocks_pure_factor_bb(bb_expo=lag_bb_expo_no_cf, reg_weight=np.sqrt(
+            #     self.strategy_data.stock_price.ix['FreeMarketValue']), direction=direction)
+            temp_weight = data.read_data(['Weight_zz500'], ['Weight_zz500'])
+            self.select_stocks_pure_factor(base_expo=lag_bb_expo_no_cf, reg_weight=np.sqrt(
+                self.strategy_data.stock_price.ix['FreeMarketValue']), direction=direction,
+                benchmark_weight=temp_weight['Weight_zz500'], is_long_only=True)
 
         # 如果有外来的backtest对象，则使用这个backtest对象，如果没有，则需要自己建立，同时传入最新持仓
         if bkt_obj == 'Empty':

@@ -221,7 +221,7 @@ class backtest(object):
         self.benchmark_value = pd.concat([benchmark_base_value, self.benchmark_value])
 
         # 计算每天的持股数
-        self.info_series['holding_num'] = (self.real_vol_position.holding_matrix>0).sum(1)
+        self.info_series['holding_num'] = (self.real_vol_position.holding_matrix != 0).sum(1)
     
     # 单独处理回测的第一期，因为这一期没有cursor-1项
     def deal_with_first_day(self, curr_time, curr_tar_pct_holding):
@@ -240,14 +240,33 @@ class backtest(object):
             
             if not curr_tar_pct_holding.ix[tradable].empty:
                 # 对可买入的股票进行权重的重新归一计算，直接就用这个百分比买入股票
+                # 允许做空的时候，可以卖出
                 tradable_pct = curr_tar_pct_holding.ix[tradable] / (curr_tar_pct_holding.ix[tradable].abs().sum())
+                # 预计买入，卖出的量
+                projected_vol = pd.to_numeric(self.cash.ix[0] * tradable_pct /
+                                              self.bkt_data.stock_price.ix['OpenPrice_adj', 0, tradable] * 100)
+                projected_vol = np.floor(projected_vol.abs()) * np.sign(projected_vol)
+                projected_vol_holding = projected_vol.reindex(self.real_vol_position.holding_matrix.columns, fill_value=0)
+                # 处理做空
+                sell_plan = -(projected_vol_holding.ix[projected_vol_holding<0])
+                if not sell_plan.empty:
+                    # 做空股票的总额
+                    sell_value = (sell_plan * self.bkt_data.stock_price.ix['OpenPrice_adj', 0, :] * 100).sum()
+                    # 卖出后的资金
+                    self.cash.ix[0] += sell_value * (1-self.sell_cost)
+                    # 卖出后的持仓
+                    self.real_vol_position.subtract_holding(curr_time, sell_plan)
+                buy_plan = projected_vol_holding.ix[projected_vol_holding>0]
+                # 买入量的百分比
+                buy_plan_pct = buy_plan / buy_plan.sum()
                 # 计算买入的量
-                real_buy_vol = (self.cash.ix[0] * tradable_pct / (1+self.buy_cost) /
+                real_buy_vol = (self.cash.ix[0] * buy_plan_pct / (1+self.buy_cost) /
                                 (self.bkt_data.stock_price.ix['OpenPrice_adj', 0, :] * 100))
                 real_buy_vol = np.floor(real_buy_vol.abs()) * np.sign(real_buy_vol)
+                # 买入股票的总额
+                buy_value = (real_buy_vol * 100 * self.bkt_data.stock_price.ix['OpenPrice_adj', 0, :]).sum()
                 # 买入后的资金
-                self.cash.ix[0] -= (real_buy_vol * (1+self.buy_cost) * 100 *
-                                    self.bkt_data.stock_price.ix['OpenPrice_adj', 0, :]).sum()
+                self.cash.ix[0] -= buy_value * (1+self.buy_cost)
                 # 买入后的持仓
                 self.real_vol_position.add_holding(curr_time, real_buy_vol)
      
