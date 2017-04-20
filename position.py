@@ -72,14 +72,33 @@ class position(object):
         self.to_percentage()
         pass
 
+    # 定义归一化的要apply的函数
+    # infinitesimal为在做空情况下，多空组合的和可能非常接近于0，当多空组合的和小于这个值的时候，分多空的方法归一
+    @staticmethod
+    def to_percentage_func(input_series, *, infinitesimal=1e-4):
+        # 注意如果一期持仓全是0，则不改动
+        if (input_series == 0).all():
+            return input_series
+        # 当组合的和小于设定的无穷小量时，采用多空分别归一的方法归一
+        elif input_series.sum() < infinitesimal:
+            positive_part = input_series[input_series > 0]
+            positive_part = positive_part.div(positive_part.sum())
+            negative_part = input_series[input_series < 0]
+            negative_part = negative_part.div(negative_part.sum())
+            input_series[positive_part.index] = positive_part
+            input_series[negative_part.index] = negative_part
+            return input_series
+        # 一般情况下，直接归一
+        else:
+            input_series = input_series.div(input_series.sum())
+            return input_series
 
     # 将持仓归一化，成为加总为1的百分比数
     def to_percentage(self):
-        # 注意如果一期持仓全是0，则不改动
-        self.holding_matrix = self.holding_matrix.apply(lambda x:x if (x==0).all() else
-                                                        x.div(x.abs().sum()), axis=1)
+        # apply函数
+        self.holding_matrix = self.holding_matrix.apply(position.to_percentage_func, axis=1)
         # 防止无持仓的变成nan
-        self.holding_matrix[self.holding_matrix.isnull()] = 0
+        self.holding_matrix = self.holding_matrix.fillna(0.0)
         
     # 添加持股的函数，即，将选出的股票加入到对应时间点的持仓中去
     def add_holding(self, time, to_be_added):

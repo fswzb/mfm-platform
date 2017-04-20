@@ -224,11 +224,44 @@ class single_factor_strategy(strategy):
         # 如果有benchmark，则计算benchmark的暴露
         if type(benchmark_weight) != str:
             benchmark_weight = (benchmark_weight.div(benchmark_weight.sum(1), axis=0)).fillna(0)
-            benchmark_base_expo = np.einsum('ijk,jk->ji', base_expo.fillna(0), benchmark_weight.fillna(0))
+            adjusted_base_expo = base_expo.fillna(0.0)
+            adjusted_factor_expo = factor_expo.fillna(0.0)
+            # 得到那些有持仓，却不可交易的股票
+            held_but_nontradable = np.logical_and(benchmark_weight != 0.0,
+                                                  np.logical_not(self.strategy_data.if_tradable.ix['if_tradable']))
+            # 填充非country factor因子的原则，永远是用上一个可交易时的数据填充，不管那个数据是不是nan
+            for item in adjusted_base_expo.items:
+                    # 创建用于fillna的expo，首先将可交易，且数据为nan的地方填成0，
+                    # 这样可以保证之后需要填充的持有且不可交易的地方，会被上一个可交易时的值填充，即使上一个可交易时的值是nan
+                    # 如果不这样做，则会被上一个可交易且非nan（有数据）的填充，损失真实性
+                    tradable_and_null = np.logical_and(self.strategy_data.if_tradable.ix['if_tradable'],
+                                                       base_expo.ix[item].isnull())
+                    # 乘以1为防止传引用
+                    fillna_expo = base_expo.ix[item] * 1
+                    fillna_expo[tradable_and_null] = 0.0
+                    # 这时用于fillna的expo就可以向前填充了，这里为nan的地方都是不可以交易的地方，
+                    # 而向前填nan则意味着用可交易时的数据填充不可交易时的数据
+                    fillna_expo = fillna_expo.fillna(method='ffill')
+                    # 将每个因子中，那些持有且不可交易的股票暴露重新设置为nan
+                    adjusted_base_expo[item][held_but_nontradable] = np.nan
+                    # 然后用fillna_expo的数据去填充这些nan，这样可以做到始终用上一个可交易时的数据填充，保证：
+                    # 第一，有持仓却不可交易的地方永远是被上一个可交易的数据填充的，无论那个数据是不是nan
+                    # 第二，无持仓且不可交易的地方仍然是0，虽然其取值不会影响后面的组合暴露的计算
+                    adjusted_base_expo[item] = adjusted_base_expo[item].fillna(fillna_expo)
+
+            benchmark_base_expo = np.einsum('ijk,jk->ji', adjusted_base_expo, benchmark_weight.fillna(0))
             benchmark_base_expo = pd.DataFrame(benchmark_base_expo, index=base_expo.major_axis, columns=base_expo.items)
             # 而且当前因子暴露要设置为相对benchmark的暴露
-            benchmark_curr_factor_expo = (factor_expo * benchmark_weight).sum(1)
+            tradable_and_null = np.logical_and(self.strategy_data.if_tradable.ix['if_tradable'],
+                                               factor_expo.isnull())
+            fillna_factor_expo = factor_expo * 1
+            fillna_factor_expo[tradable_and_null] = 0.0
+            fillna_factor_expo = fillna_factor_expo.fillna(method='ffill')
+            adjusted_factor_expo[held_but_nontradable] = np.nan
+            adjusted_factor_expo = adjusted_factor_expo.fillna(fillna_factor_expo)
+            benchmark_curr_factor_expo = (adjusted_factor_expo * benchmark_weight).sum(1)
             self.strategy_data.factor_expo.ix['factor_expo'] = factor_expo.sub(benchmark_curr_factor_expo, axis=0)
+
 
         # 循环调仓日
         for cursor, time in self.holding_days.iteritems():

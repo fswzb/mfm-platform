@@ -179,7 +179,7 @@ class backtest(object):
             # 非回测第一天
             # 如果为非调仓日
             elif curr_time not in self.bkt_position.holding_matrix.index:
-                
+                # 移动持仓和现金
                 self.real_vol_position.holding_matrix.ix[cursor, :] = self.real_vol_position.holding_matrix.ix[cursor-1, :]
                 self.cash.ix[cursor] = self.cash.ix[cursor-1]
                 
@@ -188,7 +188,8 @@ class backtest(object):
         
             # 如果为调仓日
             else:
-                
+                # 首先，将上一期的持仓移动到这一期，同时移动现金
+                self.real_vol_position.holding_matrix.ix[cursor, :] = self.real_vol_position.holding_matrix.ix[cursor-1, :]
                 self.cash.ix[cursor] = self.cash.ix[cursor-1]
                 
                 # 首先必须有对当天退市股票的处理
@@ -241,7 +242,7 @@ class backtest(object):
             if not curr_tar_pct_holding.ix[tradable].empty:
                 # 对可买入的股票进行权重的重新归一计算，直接就用这个百分比买入股票
                 # 允许做空的时候，可以卖出
-                tradable_pct = curr_tar_pct_holding.ix[tradable] / (curr_tar_pct_holding.ix[tradable].abs().sum())
+                tradable_pct = position.to_percentage_func(curr_tar_pct_holding[tradable]).fillna(0.0)
                 # 预计买入，卖出的量
                 projected_vol = pd.to_numeric(self.cash.ix[0] * tradable_pct /
                                               self.bkt_data.stock_price.ix['OpenPrice_adj', 0, tradable] * 100)
@@ -292,12 +293,12 @@ class backtest(object):
         # 预估交易和此后的实际交易中，股票买卖价格均为开盘价，即假设开盘时一瞬间，就计算出了预计交易量和进行了实际交易
         # 另一个关于此的假设是，在实际交易中，会考虑到涨跌停问题，但是在预估交易时不用到涨跌停信息，即使可能只用开盘价也能得到这些信息，这里日后可进行调整
         # 这里预估的时候，卖价没有计算交易费用，这样会导致对当期可用资金的高估，从而高估预计买入的量，因此这里还需要日后调整
-        curr_cash_available = (self.real_vol_position.holding_matrix.ix[cursor-1, tradable] *
+        curr_cash_available = (self.real_vol_position.holding_matrix.ix[cursor, tradable] *
                                self.bkt_data.stock_price.ix['OpenPrice_adj', cursor, tradable] *
-                               100 ).sum() + self.cash.ix[cursor-1]
+                               100 ).sum() + self.cash.ix[cursor]
                                                        
         # 对目标持仓股票中，可以交易的股票进行权重的重新归一计算
-        projected_pct = curr_tar_pct_holding.ix[tradable] / (curr_tar_pct_holding.ix[tradable].abs().sum())
+        projected_pct = position.to_percentage_func(curr_tar_pct_holding.ix[tradable]).fillna(0.0)
                 
         # 计算预计买入的量，注意这里依然不计算交易费用
         projected_vol = pd.to_numeric(curr_cash_available * projected_pct /
@@ -305,8 +306,6 @@ class backtest(object):
         projected_vol = np.floor(projected_vol.abs()) * np.sign(projected_vol)
         
         # 预计的当期新持仓量向量，注意这里与上面的不同在于这里包含所有股票的代码
-        #proj_vol_holding = pd.Series(self.real_vol_position.holding_matrix.ix[cursor-1, :]
-        #proj_vol_holding.ix[tradable] = projected_vol
         proj_vol_holding = projected_vol.reindex(self.real_vol_position.holding_matrix.columns, fill_value=0)
         
         return proj_vol_holding
@@ -317,8 +316,6 @@ class backtest(object):
         trade_plan = proj_vol_holding - self.real_vol_position.holding_matrix.ix[cursor-1,:]
                 
         # 开始真正的交易，先卖后买
-        # 首先，将上一期的持仓移动到这一期
-        self.real_vol_position.holding_matrix.ix[cursor, :] = self.real_vol_position.holding_matrix.ix[cursor-1, :]
 
         # 用调仓当天的开盘价来计算当天持有股票的价值，用这个价值来计算换手率
         self.info_series.ix[cursor, 'holding_value'] = (self.real_vol_position.holding_matrix.ix[cursor, :] *
