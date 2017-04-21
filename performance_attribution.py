@@ -95,38 +95,40 @@ class performance_attribution(object):
         # 首先根据持仓比例计算组合在各个因子上的暴露
         # 如果采用相对基准的超额归因，则可能出现基准的成分股中有不可交易的股票，从而其没有因子暴露数据
         # 没有因子暴露数据，却在超额持仓中，会导致超额组合的暴露不正确。需要对这些股票的因子暴露进行修正
-        # 首先新建因子暴露数据，重索引为需要归因的时间段，并将nan填为0
-        adjusted_factor_expo = self.bb.bb_data.factor_expo.reindex(
-            major_axis=self.pa_position.holding_matrix.index).fillna(0.0)
-        # 接下来只有在超额归因的情况下才调整
-        if self.is_benchmark:
-            # 得到那些有持仓，却不可交易的股票
-            held_but_nontradable = np.logical_and(self.pa_position.holding_matrix != 0.0,
-                np.logical_not(self.bb.bb_data.if_tradable.ix['if_tradable', self.pa_position.holding_matrix.index, :]))
-            # 首先调整非country factor因子
-            # 填充非country factor因子的原则，永远是用上一个可交易时的数据填充，不管那个数据是不是nan
-            for item in adjusted_factor_expo.items:
-                if item != 'country_factor':
-                    # 创建用于fillna的expo，首先将可交易，且数据为nan的地方填成0，
-                    # 这样可以保证之后需要填充的持有且不可交易的地方，会被上一个可交易时的值填充，即使上一个可交易时的值是nan
-                    # 如果不这样做，则会被上一个可交易且非nan（有数据）的填充，损失真实性
-                    tradable_and_null = np.logical_and(self.bb.bb_data.if_tradable.ix['if_tradable'],
-                                                       self.bb.bb_data.factor_expo.ix[item].isnull())
-                    # 乘以1为防止传引用
-                    fillna_expo = self.bb.bb_data.factor_expo.ix[item] * 1
-                    fillna_expo[tradable_and_null] = 0.0
-                    # 这时用于fillna的expo就可以向前填充了，这里为nan的地方都是不可以交易的地方，
-                    # 而向前填nan则意味着用可交易时的数据填充不可交易时的数据
-                    fillna_expo = fillna_expo.fillna(method='ffill').reindex(index=self.pa_position.holding_matrix.index)
-                    # 将每个因子中，那些持有且不可交易的股票暴露重新设置为nan
-                    adjusted_factor_expo[item][held_but_nontradable] = np.nan
-                    # 然后用fillna_expo的数据去填充这些nan，这样可以做到始终用上一个可交易时的数据填充，保证：
-                    # 第一，有持仓却不可交易的地方永远是被上一个可交易的数据填充的，无论那个数据是不是nan
-                    # 第二，无持仓且不可交易的地方仍然是0，虽然其取值不会影响后面的组合暴露的计算
-                    adjusted_factor_expo[item] = adjusted_factor_expo[item].fillna(fillna_expo)
-            # 对于country factor，需要用1去填充，直接用1填充所有的nan数据即可，
-            adjusted_factor_expo['country_factor'] = self.bb.bb_data.factor_expo.ix['country_factor',
-                self.pa_position.holding_matrix.index, :].fillna(1.0)
+        adjusted_factor_expo = strategy_data.adjust_benchmark_related_expo(self.bb.bb_data.factor_expo,
+                                self.pa_position.holding_matrix, self.bb.bb_data.if_tradable.ix['if_tradable'])
+        # # 首先新建因子暴露数据，重索引为需要归因的时间段，并将nan填为0
+        # adjusted_factor_expo = self.bb.bb_data.factor_expo.reindex(
+        #     major_axis=self.pa_position.holding_matrix.index).fillna(0.0)
+        # # 接下来只有在超额归因的情况下才调整
+        # if self.is_benchmark:
+        #     # 得到那些有持仓，却不可交易的股票
+        #     held_but_nontradable = np.logical_and(self.pa_position.holding_matrix != 0.0,
+        #         np.logical_not(self.bb.bb_data.if_tradable.ix['if_tradable', self.pa_position.holding_matrix.index, :]))
+        #     # 首先调整非country factor因子
+        #     # 填充非country factor因子的原则，永远是用上一个可交易时的数据填充，不管那个数据是不是nan
+        #     for item in adjusted_factor_expo.items:
+        #         if item != 'country_factor':
+        #             # 创建用于fillna的expo，首先将可交易，且数据为nan的地方填成0，
+        #             # 这样可以保证之后需要填充的持有且不可交易的地方，会被上一个可交易时的值填充，即使上一个可交易时的值是nan
+        #             # 如果不这样做，则会被上一个可交易且非nan（有数据）的填充，损失真实性
+        #             tradable_and_null = np.logical_and(self.bb.bb_data.if_tradable.ix['if_tradable'],
+        #                                                self.bb.bb_data.factor_expo.ix[item].isnull())
+        #             # 乘以1为防止传引用
+        #             fillna_expo = self.bb.bb_data.factor_expo.ix[item] * 1
+        #             fillna_expo[tradable_and_null] = 0.0
+        #             # 这时用于fillna的expo就可以向前填充了，这里为nan的地方都是不可以交易的地方，
+        #             # 而向前填nan则意味着用可交易时的数据填充不可交易时的数据
+        #             fillna_expo = fillna_expo.fillna(method='ffill').reindex(index=self.pa_position.holding_matrix.index)
+        #             # 将每个因子中，那些持有且不可交易的股票暴露重新设置为nan
+        #             adjusted_factor_expo[item][held_but_nontradable] = np.nan
+        #             # 然后用fillna_expo的数据去填充这些nan，这样可以做到始终用上一个可交易时的数据填充，保证：
+        #             # 第一，有持仓却不可交易的地方永远是被上一个可交易的数据填充的，无论那个数据是不是nan
+        #             # 第二，无持仓且不可交易的地方仍然是0，虽然其取值不会影响后面的组合暴露的计算
+        #             adjusted_factor_expo[item] = adjusted_factor_expo[item].fillna(fillna_expo)
+        #     # 对于country factor，需要用1去填充，直接用1填充所有的nan数据即可，
+        #     adjusted_factor_expo['country_factor'] = self.bb.bb_data.factor_expo.ix['country_factor',
+        #         self.pa_position.holding_matrix.index, :].fillna(1.0)
         self.port_expo = np.einsum('ijk,jk->ji', adjusted_factor_expo,
             self.pa_position.holding_matrix.fillna(0))
         self.port_expo = pd.DataFrame(self.port_expo, index=self.pa_returns.index, 

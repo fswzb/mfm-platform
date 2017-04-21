@@ -20,7 +20,7 @@ from performance import performance
 from performance_attribution import performance_attribution
 
 # 回测类，对给定的持仓进行回测
-# 添加支持卖空
+# 添加支持卖空，但仅支持正杠杆的卖空，账户净值为0或者为负的不支持
 
 class backtest(object):
     """ The class for backtest.
@@ -30,13 +30,23 @@ class backtest(object):
     
     def __init__(self, bkt_position, *, initial_money = 100000000, trade_ratio = 0.95, 
                  buy_cost = 1.3/1000, sell_cost = 1.3/1000, bkt_start = 'default', bkt_end = 'default', 
-                 risk_free_rate = 0.05, bkt_stock_data = 'default', bkt_benchmark_data = 'default'):
+                 risk_free_rate = 0.05, bkt_stock_data = 'default', bkt_benchmark_data = 'default',
+                 infinitesimal=1e-4):
         """ Initialize backtest object.
         
         foo
         """
         # 初始化传入的持仓类，是要回测的策略构造出的持仓矩阵对象，是回测的目标持仓，注意此日期为调仓日
         self.bkt_position = bkt_position
+
+        # 只支持正杠杆，即买空卖空的持仓比例之和必须大于0
+        greater_than_zero_condition = self.bkt_position.holding_matrix.sum(1) > infinitesimal
+        # 确保这些持仓比例和为0的股票并非全是0，以免将全是0的持仓判断为非法持仓
+        all_zeros_condition = self.bkt_position.holding_matrix.ix[~greater_than_zero_condition].prod(1) == 0.0
+        assert np.logical_or(greater_than_zero_condition, all_zeros_condition).all(), \
+            'Sum of the holding matrix are no greater than 0 for at least 1 timestamp, this is not supported by this ' \
+            'backtest system. Note that the timestamp whose holdings are all 0 has been excluded from this error.\n'
+
         
         # 初始化回测用到的股价数据类
         self.bkt_data = backtest_data()
@@ -263,7 +273,7 @@ class backtest(object):
                 # 计算买入的量
                 real_buy_vol = (self.cash.ix[0] * buy_plan_pct / (1+self.buy_cost) /
                                 (self.bkt_data.stock_price.ix['OpenPrice_adj', 0, :] * 100))
-                real_buy_vol = np.floor(real_buy_vol.abs()) * np.sign(real_buy_vol)
+                real_buy_vol = np.floor(real_buy_vol)
                 # 买入股票的总额
                 buy_value = (real_buy_vol * 100 * self.bkt_data.stock_price.ix['OpenPrice_adj', 0, :]).sum()
                 # 买入后的资金
@@ -338,11 +348,11 @@ class backtest(object):
         # 有买入
         if not buy_plan.empty:
             # 计算买入量的百分比，这是因为，有实际操作以及刚刚提到的交易费用的原因，计划的买入量和实际的买入量会不同，只能按比例买
-            buy_plan_pct = buy_plan / buy_plan.abs().sum()
+            buy_plan_pct = buy_plan / buy_plan.sum()
             # 实际买入的量，用实际的现金，以buy_plan的比例买入股票
             real_buy_vol = self.cash.ix[cursor] * buy_plan_pct / (1+self.buy_cost) / \
                             (self.bkt_data.stock_price.ix['OpenPrice_adj', cursor, :] * 100)
-            real_buy_vol = np.floor(real_buy_vol.abs()) * np.sign(real_buy_vol)
+            real_buy_vol = np.floor(real_buy_vol)
 
             # 买入的股票的总额
             self.info_series.ix[cursor, 'buy_value'] = (real_buy_vol *100 *

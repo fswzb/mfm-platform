@@ -224,41 +224,47 @@ class single_factor_strategy(strategy):
         # 如果有benchmark，则计算benchmark的暴露
         if type(benchmark_weight) != str:
             benchmark_weight = (benchmark_weight.div(benchmark_weight.sum(1), axis=0)).fillna(0)
-            adjusted_base_expo = base_expo.fillna(0.0)
-            adjusted_factor_expo = factor_expo.fillna(0.0)
-            # 得到那些有持仓，却不可交易的股票
-            held_but_nontradable = np.logical_and(benchmark_weight != 0.0,
-                                                  np.logical_not(self.strategy_data.if_tradable.ix['if_tradable']))
-            # 填充非country factor因子的原则，永远是用上一个可交易时的数据填充，不管那个数据是不是nan
-            for item in adjusted_base_expo.items:
-                    # 创建用于fillna的expo，首先将可交易，且数据为nan的地方填成0，
-                    # 这样可以保证之后需要填充的持有且不可交易的地方，会被上一个可交易时的值填充，即使上一个可交易时的值是nan
-                    # 如果不这样做，则会被上一个可交易且非nan（有数据）的填充，损失真实性
-                    tradable_and_null = np.logical_and(self.strategy_data.if_tradable.ix['if_tradable'],
-                                                       base_expo.ix[item].isnull())
-                    # 乘以1为防止传引用
-                    fillna_expo = base_expo.ix[item] * 1
-                    fillna_expo[tradable_and_null] = 0.0
-                    # 这时用于fillna的expo就可以向前填充了，这里为nan的地方都是不可以交易的地方，
-                    # 而向前填nan则意味着用可交易时的数据填充不可交易时的数据
-                    fillna_expo = fillna_expo.fillna(method='ffill')
-                    # 将每个因子中，那些持有且不可交易的股票暴露重新设置为nan
-                    adjusted_base_expo[item][held_but_nontradable] = np.nan
-                    # 然后用fillna_expo的数据去填充这些nan，这样可以做到始终用上一个可交易时的数据填充，保证：
-                    # 第一，有持仓却不可交易的地方永远是被上一个可交易的数据填充的，无论那个数据是不是nan
-                    # 第二，无持仓且不可交易的地方仍然是0，虽然其取值不会影响后面的组合暴露的计算
-                    adjusted_base_expo[item] = adjusted_base_expo[item].fillna(fillna_expo)
+            adjusted_base_expo = strategy_data.adjust_benchmark_related_expo(base_expo,
+                                    benchmark_weight, self.strategy_data.if_tradable.ix['if_tradable'])
+            # adjusted_base_expo = base_expo.fillna(0.0)
+            # adjusted_factor_expo = factor_expo.fillna(0.0)
+            # # 得到那些有持仓，却不可交易的股票
+            # held_but_nontradable = np.logical_and(benchmark_weight != 0.0,
+            #                                       np.logical_not(self.strategy_data.if_tradable.ix['if_tradable']))
+            # # 填充非country factor因子的原则，永远是用上一个可交易时的数据填充，不管那个数据是不是nan
+            # for item in adjusted_base_expo.items:
+            #         # 创建用于fillna的expo，首先将可交易，且数据为nan的地方填成0，
+            #         # 这样可以保证之后需要填充的持有且不可交易的地方，会被上一个可交易时的值填充，即使上一个可交易时的值是nan
+            #         # 如果不这样做，则会被上一个可交易且非nan（有数据）的填充，损失真实性
+            #         tradable_and_null = np.logical_and(self.strategy_data.if_tradable.ix['if_tradable'],
+            #                                            base_expo.ix[item].isnull())
+            #         # 乘以1为防止传引用
+            #         fillna_expo = base_expo.ix[item] * 1
+            #         fillna_expo[tradable_and_null] = 0.0
+            #         # 这时用于fillna的expo就可以向前填充了，这里为nan的地方都是不可以交易的地方，
+            #         # 而向前填nan则意味着用可交易时的数据填充不可交易时的数据
+            #         fillna_expo = fillna_expo.fillna(method='ffill')
+            #         # 将每个因子中，那些持有且不可交易的股票暴露重新设置为nan
+            #         adjusted_base_expo[item][held_but_nontradable] = np.nan
+            #         # 然后用fillna_expo的数据去填充这些nan，这样可以做到始终用上一个可交易时的数据填充，保证：
+            #         # 第一，有持仓却不可交易的地方永远是被上一个可交易的数据填充的，无论那个数据是不是nan
+            #         # 第二，无持仓且不可交易的地方仍然是0，虽然其取值不会影响后面的组合暴露的计算
+            #         adjusted_base_expo[item] = adjusted_base_expo[item].fillna(fillna_expo)
 
             benchmark_base_expo = np.einsum('ijk,jk->ji', adjusted_base_expo, benchmark_weight.fillna(0))
             benchmark_base_expo = pd.DataFrame(benchmark_base_expo, index=base_expo.major_axis, columns=base_expo.items)
             # 而且当前因子暴露要设置为相对benchmark的暴露
-            tradable_and_null = np.logical_and(self.strategy_data.if_tradable.ix['if_tradable'],
-                                               factor_expo.isnull())
-            fillna_factor_expo = factor_expo * 1
-            fillna_factor_expo[tradable_and_null] = 0.0
-            fillna_factor_expo = fillna_factor_expo.fillna(method='ffill')
-            adjusted_factor_expo[held_but_nontradable] = np.nan
-            adjusted_factor_expo = adjusted_factor_expo.fillna(fillna_factor_expo)
+            # tradable_and_null = np.logical_and(self.strategy_data.if_tradable.ix['if_tradable'],
+            #                                    factor_expo.isnull())
+            # fillna_factor_expo = factor_expo * 1
+            # fillna_factor_expo[tradable_and_null] = 0.0
+            # fillna_factor_expo = fillna_factor_expo.fillna(method='ffill')
+            # adjusted_factor_expo[held_but_nontradable] = np.nan
+            # adjusted_factor_expo = adjusted_factor_expo.fillna(fillna_factor_expo)
+            adjusted_factor_expo = strategy_data.adjust_benchmark_related_expo(
+                pd.Panel({'factor_expo':factor_expo}), benchmark_weight, self.strategy_data.if_tradable.ix['if_tradable']
+            )
+            adjusted_factor_expo = adjusted_factor_expo.ix['factor_expo']
             benchmark_curr_factor_expo = (adjusted_factor_expo * benchmark_weight).sum(1)
             self.strategy_data.factor_expo.ix['factor_expo'] = factor_expo.sub(benchmark_curr_factor_expo, axis=0)
 
@@ -525,8 +531,17 @@ class single_factor_strategy(strategy):
             else:
                 print('Please enter ''+'' or ''-'' for direction argument')
                 
-            # 进行qcut
-            labeled_factor = pd.qcut(curr_factor_data, no_of_groups, labels = False)
+            # # 进行qcut
+            # labeled_factor = pd.qcut(curr_factor_data, no_of_groups, labels = False)
+
+            # This is a temporary solution to pandas.qcut's unique bin edge error.
+            # It will be removed when pandas 0.20.0 release, which gives an additional parameter to handle this problem
+            def pct_rank_qcut(series, n):
+                edges = pd.Series([float(i) / n for i in range(n + 1)])
+                f = lambda x: (edges >= x).argmax()-1
+                return series.rank(pct=1).apply(f).reindex(series.index)
+            labeled_factor = pct_rank_qcut(curr_factor_data.dropna(), no_of_groups).reindex(curr_factor_data.index)
+
             # 选取指定组的股票，注意标签是0开始，传入参数是1开始，因此需要减1
             selected_stocks = curr_factor_data.ix[labeled_factor == group-1].index
             # 被选取股票的持仓调为1
@@ -704,8 +719,8 @@ class single_factor_strategy(strategy):
         elif select_method == 1:
             # 分行业选股
             self.select_stocks_within_indus(weight=2, direction=direction)
-        elif select_method ==2:
-            # 用构造纯因子组合的方法选股
+        elif select_method ==2 or select_method == 3:
+            # 用构造纯因子组合的方法选股，2为组合自己是纯因子组合，3为组合相对基准是纯因子组合
             # 首先和计算纯因子一样，要计算bb因子的暴露
             if bb_obj.bb_data.factor_expo.empty:
                 bb_obj.just_get_factor_expo()
@@ -716,10 +731,14 @@ class single_factor_strategy(strategy):
             # # 构造纯因子组合，权重使用回归权重，即市值的根号
             # self.select_stocks_pure_factor_bb(bb_expo=lag_bb_expo_no_cf, reg_weight=np.sqrt(
             #     self.strategy_data.stock_price.ix['FreeMarketValue']), direction=direction)
-            temp_weight = data.read_data(['Weight_zz500'], ['Weight_zz500'])
+            if select_method == 3 and self.strategy_data.stock_pool == 'all':
+                temp_weight = data.read_data(['Weight_zz500'], ['Weight_zz500'])
+                temp_weight = temp_weight['Weight_zz500']
+            elif select_method ==3 and self.strategy_data.stock_pool != 'all':
+                temp_weight = self.strategy_data.benchmark_price.ix['Weight_'+self.strategy_data.stock_pool]
             self.select_stocks_pure_factor(base_expo=lag_bb_expo_no_cf, reg_weight=np.sqrt(
                 self.strategy_data.stock_price.ix['FreeMarketValue']), direction=direction,
-                benchmark_weight=temp_weight['Weight_zz500'], is_long_only=True)
+                benchmark_weight=temp_weight, is_long_only=True)
 
         # 如果有外来的backtest对象，则使用这个backtest对象，如果没有，则需要自己建立，同时传入最新持仓
         if bkt_obj == 'Empty':
