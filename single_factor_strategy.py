@@ -34,9 +34,12 @@ class single_factor_strategy(strategy):
     """
     def __init__(self):
         strategy.__init__(self)
-        self.strategy_data.generate_if_tradable(shift = True)
+        # 每个因子策略都需要用到是否可交易的数据
+        self.strategy_data.generate_if_tradable(shift=True)
         # 读取市值数据以进行市值加权
         self.strategy_data.stock_price = data.read_data(['FreeMarketValue'],['FreeMarketValue'],shift = True)
+        # 用来画图的pdf对象
+        self.pdfs = 'default'
         
     # 读取因子数据的函数
     def read_factor_data(self, file_name, factor_name, *, shift = True):
@@ -226,48 +229,15 @@ class single_factor_strategy(strategy):
             benchmark_weight = (benchmark_weight.div(benchmark_weight.sum(1), axis=0)).fillna(0)
             adjusted_base_expo = strategy_data.adjust_benchmark_related_expo(base_expo,
                                     benchmark_weight, self.strategy_data.if_tradable.ix['if_tradable'])
-            # adjusted_base_expo = base_expo.fillna(0.0)
-            # adjusted_factor_expo = factor_expo.fillna(0.0)
-            # # 得到那些有持仓，却不可交易的股票
-            # held_but_nontradable = np.logical_and(benchmark_weight != 0.0,
-            #                                       np.logical_not(self.strategy_data.if_tradable.ix['if_tradable']))
-            # # 填充非country factor因子的原则，永远是用上一个可交易时的数据填充，不管那个数据是不是nan
-            # for item in adjusted_base_expo.items:
-            #         # 创建用于fillna的expo，首先将可交易，且数据为nan的地方填成0，
-            #         # 这样可以保证之后需要填充的持有且不可交易的地方，会被上一个可交易时的值填充，即使上一个可交易时的值是nan
-            #         # 如果不这样做，则会被上一个可交易且非nan（有数据）的填充，损失真实性
-            #         tradable_and_null = np.logical_and(self.strategy_data.if_tradable.ix['if_tradable'],
-            #                                            base_expo.ix[item].isnull())
-            #         # 乘以1为防止传引用
-            #         fillna_expo = base_expo.ix[item] * 1
-            #         fillna_expo[tradable_and_null] = 0.0
-            #         # 这时用于fillna的expo就可以向前填充了，这里为nan的地方都是不可以交易的地方，
-            #         # 而向前填nan则意味着用可交易时的数据填充不可交易时的数据
-            #         fillna_expo = fillna_expo.fillna(method='ffill')
-            #         # 将每个因子中，那些持有且不可交易的股票暴露重新设置为nan
-            #         adjusted_base_expo[item][held_but_nontradable] = np.nan
-            #         # 然后用fillna_expo的数据去填充这些nan，这样可以做到始终用上一个可交易时的数据填充，保证：
-            #         # 第一，有持仓却不可交易的地方永远是被上一个可交易的数据填充的，无论那个数据是不是nan
-            #         # 第二，无持仓且不可交易的地方仍然是0，虽然其取值不会影响后面的组合暴露的计算
-            #         adjusted_base_expo[item] = adjusted_base_expo[item].fillna(fillna_expo)
-
             benchmark_base_expo = np.einsum('ijk,jk->ji', adjusted_base_expo, benchmark_weight.fillna(0))
             benchmark_base_expo = pd.DataFrame(benchmark_base_expo, index=base_expo.major_axis, columns=base_expo.items)
-            # 而且当前因子暴露要设置为相对benchmark的暴露
-            # tradable_and_null = np.logical_and(self.strategy_data.if_tradable.ix['if_tradable'],
-            #                                    factor_expo.isnull())
-            # fillna_factor_expo = factor_expo * 1
-            # fillna_factor_expo[tradable_and_null] = 0.0
-            # fillna_factor_expo = fillna_factor_expo.fillna(method='ffill')
-            # adjusted_factor_expo[held_but_nontradable] = np.nan
-            # adjusted_factor_expo = adjusted_factor_expo.fillna(fillna_factor_expo)
+
             adjusted_factor_expo = strategy_data.adjust_benchmark_related_expo(
                 pd.Panel({'factor_expo':factor_expo}), benchmark_weight, self.strategy_data.if_tradable.ix['if_tradable']
             )
             adjusted_factor_expo = adjusted_factor_expo.ix['factor_expo']
             benchmark_curr_factor_expo = (adjusted_factor_expo * benchmark_weight).sum(1)
             self.strategy_data.factor_expo.ix['factor_expo'] = factor_expo.sub(benchmark_curr_factor_expo, axis=0)
-
 
         # 循环调仓日
         for cursor, time in self.holding_days.iteritems():
@@ -356,8 +326,6 @@ class single_factor_strategy(strategy):
         self.position.to_percentage()
         pass
 
-
-    
     # 单因子的因子收益率计算和检验，用来判断因子有效性，
     # holding_freq为回归收益的频率，默认为月，可调整为与调仓周期一样，也可不同
     # weights为用来回归的权重，默认为等权回归
@@ -440,7 +408,8 @@ class single_factor_strategy(strategy):
         ax.set_ylabel('Return of The Factor (%)')
         ax.set_title('The Return Series of The Factor')
         plt.savefig(str(os.path.abspath('.')) + '/' + self.strategy_data.stock_pool + '/' + 'FactorReturn.png', dpi=1200)
-        plt.savefig(self.pdfs, format='pdf')
+        if type(self.pdfs) != str:
+            plt.savefig(self.pdfs, format='pdf')
 
         fx = plt.figure()
         ax = fx.add_subplot(1, 1, 1)
@@ -450,7 +419,8 @@ class single_factor_strategy(strategy):
         ax.set_ylabel('T-Stats of The Factor Return')
         ax.set_title('The T-Stats Series of The Factor Return')
         plt.savefig(str(os.path.abspath('.')) + '/' + self.strategy_data.stock_pool + '/' + 'FactorReturnTStats.png', dpi=1200)
-        plt.savefig(self.pdfs, format='pdf')
+        if type(self.pdfs) != str:
+            plt.savefig(self.pdfs, format='pdf')
 
     # 计算因子的IC，股票收益率是以holding_freq为频率的的收益率，默认为月
     def get_factor_ic(self, *, holding_freq='m', direction = '+', start='default', end='default'):
@@ -513,7 +483,8 @@ class single_factor_strategy(strategy):
         ax.set_ylabel('IC of The Factor')
         ax.set_title('The IC Time Series of The Factor')
         plt.savefig(str(os.path.abspath('.')) + '/' + self.strategy_data.stock_pool + '/' + 'FactorIC.png', dpi=1200)
-        plt.savefig(self.pdfs, format='pdf')
+        if type(self.pdfs) != str:
+            plt.savefig(self.pdfs, format='pdf')
         
     # 根据分位数分组选股，用来画同一因子不同分位数分组之间的收益率对比，以此判断因子的有效性
     def select_qgroup(self, no_of_groups, group, *, direction = '+', weight = 0):
@@ -535,7 +506,7 @@ class single_factor_strategy(strategy):
             # labeled_factor = pd.qcut(curr_factor_data, no_of_groups, labels = False)
 
             # This is a temporary solution to pandas.qcut's unique bin edge error.
-            # It will be removed when pandas 0.20.0 release, which gives an additional parameter to handle this problem
+            # It will be removed when pandas 0.20.0 releases, which gives an additional parameter to handle this problem
             def pct_rank_qcut(series, n):
                 edges = pd.Series([float(i) / n for i in range(n + 1)])
                 f = lambda x: (edges >= x).argmax()-1
@@ -596,7 +567,8 @@ class single_factor_strategy(strategy):
 
             ax1.legend(loc='best')
             plt.savefig(str(os.path.abspath('.')) + '/' + self.strategy_data.stock_pool + '/' + 'QGroupsNetValue.png', dpi=1200)
-            plt.savefig(self.pdfs, format='pdf')
+            if type(self.pdfs) != str:
+                plt.savefig(self.pdfs, format='pdf')
 
             # 画long-short的图
             f2 = plt.figure()
@@ -606,7 +578,8 @@ class single_factor_strategy(strategy):
             ax2.set_title('Net Account Value of Long-Short Portfolio of The Factor')
             plt.plot(long_series - short_series)
             plt.savefig(str(os.path.abspath('.')) + '/' + self.strategy_data.stock_pool + '/' + 'LongShortNetValue.png', dpi=1200)
-            plt.savefig(self.pdfs, format='pdf')
+            if type(self.pdfs) != str:
+                plt.savefig(self.pdfs, format='pdf')
 
         elif value == 2:
             # 先初始化图片
@@ -650,11 +623,52 @@ class single_factor_strategy(strategy):
             plt.savefig(str(os.path.abspath('.')) + '/' + self.strategy_data.stock_pool + '/' + 'LongShortCumLog.png', dpi=1200)
             plt.savefig(self.pdfs, format='pdf')
 
+    # 用回归取残差的方法（即gram-schmidt正交法）取因子相对一基准的纯因子暴露
+    # 之后可以用这个因子暴露当作因子进行选股，以及回归得纯因子组合收益率（主要用途），或者算ic等
+    def get_pure_factor_gs_orth(self, base_expo, *, do_active_bb_pure_factor=False):
+        # 计算当前因子的暴露，注意策略里的数据都已经lag过了
+        factor_expo = strategy_data.get_cap_wgt_exposure(self.strategy_data.factor.iloc[0],
+                                                         self.strategy_data.stock_price.ix['FreeMarketValue'])
+        # 如果计算的是相对基准的纯因子收益率
+        if do_active_bb_pure_factor:
+            if self.strategy_data.stock_pool == 'all':
+                benchmark_weight = data.read_data(['Weight_zz500'], ['Weight_zz500'], shift=True)
+            else:
+                benchmark_weight = self.strategy_data.benchmark_price.ix['Weight_' + self.strategy_data.stock_pool]
+            # 计算bb base的调整后暴露，以及调整后benchmark在bb base上的暴露
+            adjusted_bb_expo = strategy_data.adjust_benchmark_related_expo(base_expo, benchmark_weight,
+                                                                           self.strategy_data.if_tradable.ix[
+                                                                               'if_tradable'])
+            benchmark_bb_expo = np.einsum('ijk,jk->ji', adjusted_bb_expo, benchmark_weight.fillna(0))
+            benchmark_bb_expo = pd.DataFrame(benchmark_bb_expo, index=base_expo.major_axis, columns=base_expo.items)
+            # 计算当前因子的调整后暴露值，以及调整后benchmark在当前因子上的暴露
+            adjusted_factor_expo = strategy_data.adjust_benchmark_related_expo(self.strategy_data.factor,
+                                                                               benchmark_weight,
+                                                                               self.strategy_data.if_tradable.ix[
+                                                                                   'if_tradable'])
+            adjusted_factor_expo = adjusted_factor_expo.iloc[0]
+            benchmark_factor_expo = (adjusted_factor_expo * benchmark_weight).sum(1)
+            # 用暴露的绝对值减去基准的暴露值，得到相对基准的超额暴露值
+            bb_expo = base_expo.sub(benchmark_bb_expo, axis=0)
+            factor_expo = factor_expo.sub(benchmark_factor_expo, axis=0)
+        # 在bb expo里去掉国家因子，去掉是为了保证有唯一解，而且去掉后残差值不变，不影响结果
+        # 因为国家因子向量已经能表示成行业暴露的线性组合了
+        if 'country_factor' in base_expo.items:
+            base_expo_no_cf = base_expo.drop('country_factor', axis=0)
+        else:
+            base_expo_no_cf = base_expo
+        # 利用多元线性回归进行提纯
+        pure_factor_expo = strategy_data.simple_orth_gs(factor_expo, base_expo_no_cf, weights=
+            np.sqrt(self.strategy_data.stock_price.ix['FreeMarketValue']), add_constant=False)
+        # 将得到的纯化因子放入因子值中储存
+        self.strategy_data.factor.iloc[0] = pure_factor_expo
+
     # 根据一个股票池进行一次完整的单因子测试的函数
     # select method为单因子测试策略的选股方式，0为按比例选股，1为分行业按比例选股
     def single_factor_test(self, *, factor, direction='+', bkt_obj='Empty', bb_obj='Empty', pa_benchmark_weight='default',
-                           discard_factor=[], bkt_start='default', bkt_end='default', stock_pool='all', do_pa=True,
-                           do_bb_pure_factor=False, select_method=0, do_active_pa=False, holding_freq='m'):
+                           discard_factor=[], bkt_start='default', bkt_end='default', stock_pool='all', select_method=0,
+                           do_pa=True, do_active_pa=False, do_bb_pure_factor=False, do_active_bb_pure_factor=False,
+                           holding_freq='m'):
         # 如果传入的是str，则读取同名文件，如果是dataframe，则直接传入因子
         if type(factor) == str:
             self.read_factor_data([factor], [factor], shift=True)
@@ -700,26 +714,17 @@ class single_factor_strategy(strategy):
             # 否则就是用未来的bb信息来对上一期的已知的因子进行提纯，而这里因子暴露的计算lag不会影响归因时候的计算
             # 因为归因时候的计算会用没有lag的因子值和其他bb数据重新计算暴露
             lag_bb_expo = bb_obj.bb_data.factor_expo.shift(1).reindex(major_axis=bb_obj.bb_data.factor_expo.major_axis)
-            # 计算当前因子的暴露，注意策略里的数据都已经lag过了
-            factor_expo = strategy_data.get_cap_wgt_exposure(self.strategy_data.factor.iloc[0],
-                                                             self.strategy_data.stock_price.ix['FreeMarketValue'])
-            # 在bb expo里去掉国家因子，去掉是为了保证有唯一解，而且去掉后残差值不变，不影响结果
-            # 因为国家因子向量已经能表示成行业暴露的线性组合了
-            lag_bb_expo_no_cf = lag_bb_expo.drop('country_factor', axis=0)
-            # 利用多元线性回归进行提纯
-            pure_factor_expo = strategy_data.simple_orth_gs(factor_expo, lag_bb_expo_no_cf, weights=
-                                                            np.sqrt(self.strategy_data.stock_price.ix['FreeMarketValue']),
-                                                            add_constant=False)
-            # 将得到的纯化因子放入因子值中储存
-            self.strategy_data.factor.iloc[0] = pure_factor_expo
+            ac_base = lag_bb_expo.ix[['lncap','momentum','liquidity']]
+            self.get_pure_factor_gs_orth(ac_base, do_active_bb_pure_factor=do_active_bb_pure_factor)
 
+        # 按策略进行选股
         if select_method == 0:
             # 简单分位数选股
             self.select_stocks(weight=1, direction=direction)
         elif select_method == 1:
             # 分行业选股
             self.select_stocks_within_indus(weight=2, direction=direction)
-        elif select_method ==2 or select_method == 3:
+        elif select_method == 2 or select_method == 3:
             # 用构造纯因子组合的方法选股，2为组合自己是纯因子组合，3为组合相对基准是纯因子组合
             # 首先和计算纯因子一样，要计算bb因子的暴露
             if bb_obj.bb_data.factor_expo.empty:
@@ -729,12 +734,15 @@ class single_factor_strategy(strategy):
             # 同样不能有country factor
             lag_bb_expo_no_cf = lag_bb_expo.drop('country_factor', axis=0)
             # # 构造纯因子组合，权重使用回归权重，即市值的根号
+            # 初始化temp weight为'Empty'，即如果选股方法是2，则传入默认的benchmark weight
+            temp_weight = 'Empty'
             # self.select_stocks_pure_factor_bb(bb_expo=lag_bb_expo_no_cf, reg_weight=np.sqrt(
             #     self.strategy_data.stock_price.ix['FreeMarketValue']), direction=direction)
             if select_method == 3 and self.strategy_data.stock_pool == 'all':
-                temp_weight = data.read_data(['Weight_zz500'], ['Weight_zz500'])
+                temp_weight = data.read_data(['Weight_zz500'], ['Weight_zz500'], shift=True)
                 temp_weight = temp_weight['Weight_zz500']
-            elif select_method ==3 and self.strategy_data.stock_pool != 'all':
+            elif select_method == 3 and self.strategy_data.stock_pool != 'all':
+                # 注意股票池为非全市场时，基准的权重数据已经shift过了
                 temp_weight = self.strategy_data.benchmark_price.ix['Weight_'+self.strategy_data.stock_pool]
             self.select_stocks_pure_factor(base_expo=lag_bb_expo_no_cf, reg_weight=np.sqrt(
                 self.strategy_data.stock_price.ix['FreeMarketValue']), direction=direction,
@@ -762,9 +770,12 @@ class single_factor_strategy(strategy):
         # 如果要进行归因的话
         if do_pa:
             # 如果指定了要做超额收益的归因，且有股票池，则用相对基准的持仓来归因
-            # 而股票池为全市场的不进行超额归因，如果要这样做，则可显式传入pa benchmark weight
+            # 而股票池为全市场时的超额归因默认基准为中证500
             if do_active_pa and self.strategy_data.stock_pool != 'all':
-                pa_benchmark_weight = self.strategy_data.benchmark_price.ix['Weight_' + self.strategy_data.stock_pool]
+                # 注意：策略里的strategy_data里的数据都是shift过后的，而进行归因的数据和回测一样，不能用shift数据，要用当天最新数据
+                pa_benchmark_weight = data.read_data(['Weight_'+self.strategy_data.stock_pool],
+                                                     ['Weight_'+self.strategy_data.stock_pool])
+                pa_benchmark_weight = pa_benchmark_weight['Weight_'+self.strategy_data.stock_pool]
             elif do_active_pa and self.strategy_data.stock_pool == 'all':
                 temp_weight = data.read_data(['Weight_zz500'], ['Weight_zz500'])
                 pa_benchmark_weight = temp_weight['Weight_zz500']

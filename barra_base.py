@@ -818,7 +818,37 @@ class barra_base(object):
         self.is_update = False
 
 if __name__ == '__main__':
-    test = barra_base()
-    test.construct_barra_base(if_save=True)
+    import time
+    start_time = time.time()
+    bb = barra_base()
+#    bb.construct_barra_base(if_save=True)
+    bb.update_barra_base_factor_data()
+    print("time: {0} seconds\n".format(time.time()-start_time))
     pass
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 

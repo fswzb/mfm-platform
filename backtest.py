@@ -29,8 +29,8 @@ class backtest(object):
     """
     
     def __init__(self, bkt_position, *, initial_money = 100000000, trade_ratio = 0.95, 
-                 buy_cost = 1.3/1000, sell_cost = 1.3/1000, bkt_start = 'default', bkt_end = 'default', 
-                 risk_free_rate = 0.05, bkt_stock_data = 'default', bkt_benchmark_data = 'default',
+                 buy_cost = 1.5/1000, sell_cost = 1.5/1000, bkt_start = 'default', bkt_end = 'default',
+                 risk_free_rate = 0.0, bkt_stock_data = 'default', bkt_benchmark_data = 'default',
                  infinitesimal=1e-4):
         """ Initialize backtest object.
         

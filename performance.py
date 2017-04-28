@@ -25,7 +25,7 @@ class performance(object):
     """
     
     def __init__(self, account_value, *, benchmark = pd.Series(), holding_days='default', info_series='default',
-                 tradedays_one_year = 252, risk_free_rate = 0.05):
+                 tradedays_one_year = 252, risk_free_rate = 0.0):
         """ Initialize performance object.
         
         foo
@@ -130,6 +130,20 @@ class performance(object):
                 low_loc = i
                 past_peak_loc = temp_past_peak_loc
         return max_dd, past_peak_loc, low_loc
+
+    # 计算年化calmar比率
+    @staticmethod
+    def annual_calmar_ratio(annual_return, max_drawdown):
+        return annual_return / max_drawdown
+
+    # 计算年化sortino比率
+    @staticmethod
+    def annual_sortino_ratio(return_series, annual_return, *, return_target=0.0,
+                             tradedays_one_year=252, risk_free_rate=0.0):
+        under_performance_return = return_series - return_target
+        under_performance_return = under_performance_return.where(under_performance_return<0, 0.0)
+        sortino = (annual_return - risk_free_rate) / (under_performance_return.std() * np.sqrt(tradedays_one_year))
+        return sortino
         
     # 接下来计算与benchmark相关的指标
     
@@ -158,10 +172,14 @@ class performance(object):
         annual_std = performance.annual_std(self.log_return, self.tradedays_one_year)
         annual_sharpe = performance.annual_sharpe(annual_r, annual_std, self.risk_free_rate)
         max_dd, peak_loc, low_loc = performance.max_drawdown(self.account_value)
+        annual_calmar = performance.annual_calmar_ratio(annual_r, max_dd)
+        annual_sortino = performance.annual_sortino_ratio(self.log_return, annual_r, return_target=0.0,
+                            tradedays_one_year=self.tradedays_one_year, risk_free_rate=self.risk_free_rate)
         annual_ex_r = self.annual_excess_return()
         annual_ex_std = self.annual_excess_std()
         annual_info_ratio = self.info_ratio(annual_ex_r, annual_ex_std)
         max_dd_ex, peak_loc_ex, low_loc_ex = performance.max_drawdown(self.excess_net_account_value)
+        annual_ex_calmar = performance.annual_calmar_ratio(annual_ex_r, max_dd_ex)
         win_ratio = self.win_ratio()
 
         # 输出指标
@@ -172,19 +190,22 @@ class performance(object):
                      'Annual Sharpe ratio: {2:.2f}\n' \
                      'Max drawdown: {3:.2f}%\n' \
                      'Max drawdown happened between {4} and {5}\n' \
-                     'Annual excess log return: {6:.2f}%\n' \
-                     'Annual standard deviation of excess log return: {7:.2f}%\n' \
-                     'Annual information ratio: {8:.2f}\n' \
-                     'Max drawdown of excess account value: {9:.2f}%\n' \
-                     'Max drawdown happened between {10} and {11}\n' \
-                     'Winning ratio: {12:.2f}%\n' \
-                     'Average turnover ratio: {13:.2f}%\n'\
-                     'Average number of stocks holding: {14:.2f}\n'\
+                     'Annual Calmar ratio: {6:.2f}\n' \
+                     'Annual Sortino ratio: {7:.2f}\n' \
+                     'Annual excess log return: {8:.2f}%\n' \
+                     'Annual standard deviation of excess log return: {9:.2f}%\n' \
+                     'Annual information ratio: {10:.2f}\n' \
+                     'Max drawdown of excess account value: {11:.2f}%\n' \
+                     'Max drawdown happened between {12} and {13}\n' \
+                     'Annual excess Calmar ratio: {14:.2f}\n' \
+                     'Winning ratio: {15:.2f}%\n' \
+                     'Average turnover ratio: {16:.2f}%\n'\
+                     'Average number of stocks holding: {17:.2f}\n'\
                      'Stats END --------------------------------------------------------------------------\n'.format(
             annual_r*100, annual_std*100, annual_sharpe, max_dd*100, self.cum_log_return.index[peak_loc],
-            self.cum_log_return.index[low_loc], annual_ex_r*100, annual_ex_std*100, annual_info_ratio,
-            max_dd_ex*100, self.cum_log_return.index[peak_loc_ex], self.cum_log_return.index[low_loc_ex],
-            win_ratio*100,
+            self.cum_log_return.index[low_loc], annual_calmar, annual_sortino, annual_ex_r*100,
+            annual_ex_std*100, annual_info_ratio, max_dd_ex*100, self.cum_log_return.index[peak_loc_ex],
+            self.cum_log_return.index[low_loc_ex], annual_ex_calmar, win_ratio*100,
             self.info_series.ix[:, 'turnover_ratio'].replace(0, np.nan).mean()*100,
             self.info_series.ix[:, 'holding_num'].mean()
         )
@@ -214,7 +235,8 @@ class performance(object):
             
         ax1.legend(loc = 'best')
         plt.savefig(str(os.path.abspath('.'))+'/'+foldername+'/CumLog.png', dpi=1200)
-        plt.savefig(pdfs, format='pdf')
+        if type(pdfs) != str:
+            plt.savefig(pdfs, format='pdf')
         
         # 第二张图为策略超额收益曲线，只有在有benchmark的时候才画
         if not self.benchmark.empty:
@@ -226,7 +248,8 @@ class performance(object):
             ax2.set_title('The Cumulative Excess Log Return of The Strategy')
 
             plt.savefig(str(os.path.abspath('.')) + '/' +foldername+'/ActiveCumLog.png', dpi=1200)
-            plt.savefig(pdfs, format='pdf')
+            if type(pdfs) != str:
+                plt.savefig(pdfs, format='pdf')
             
         # 第三张图为策略账户净值曲线
         f3 = plt.figure()
@@ -242,7 +265,8 @@ class performance(object):
             
         ax3.legend(loc = 'best')
         plt.savefig(str(os.path.abspath('.')) + '/' +foldername+'/NetValue.png', dpi=1200)
-        plt.savefig(pdfs, format='pdf')
+        if type(pdfs) != str:
+            plt.savefig(pdfs, format='pdf')
         
         # 第四张图为策略超额收益净值，只有在有benchmark的时候才画
         if not self.benchmark.empty:
@@ -253,7 +277,8 @@ class performance(object):
             ax4.set_ylabel('Excess Net Value')
             ax4.set_title('The Excess Net Value of The Strategy')
             plt.savefig(str(os.path.abspath('.')) + '/'+foldername+'/ActiveNetValue.png', dpi=1200)
-            plt.savefig(pdfs, format='pdf')
+            if type(pdfs) != str:
+                plt.savefig(pdfs, format='pdf')
 
         # 第五张图画策略的持股数曲线
         f5 = plt.figure()

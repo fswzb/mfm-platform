@@ -424,6 +424,18 @@ class database(object):
                     self.data.benchmark_price['Weight_'+index_name[i]].fillna(0)
             pass
 
+    # 从现在的因子库里取因子数据
+    def get_existing_factor(self, factor_id):
+        sql_query = "select runnerdate as TradingDay, stockticker as SecuCode, value as factor_value " \
+                    "from RunnerValue where runnerdate>='" + str(self.trading_days.iloc[0]) + "' and " \
+                    "runnerdate<='" + str(self.trading_days.iloc[-1]) + "' and runnerid=" + str(factor_id) + " " \
+                    "order by TradingDay, SecuCode"
+        existing_factor_data = self.sq_engine.get_original_data(sql_query)
+        existing_factor = existing_factor_data.pivot_table(index='TradingDay', columns='SecuCode', values='factor_value')
+
+        # 储存数据
+        self.data.stock_price['existing_factor'] = existing_factor
+
     # 储存数据文件
     def save_data(self):
         data.write_data(self.data.stock_price)
@@ -441,37 +453,37 @@ class database(object):
         self.get_trading_days()
         self.get_labels()
         self.get_ClosePrice_adj()
-#        self.get_OpenPrice_adj()
+        self.get_OpenPrice_adj()
         self.get_ochl()
         self.get_AdjustFactor()
-#        self.get_Volume()
-#        self.get_total_and_free_mv()
-#        self.get_total_and_free_shares()
-#        self.get_Industry()
-#        self.get_is_suspended()
-#        print('get sq data has been completed.../n')
-#        self.get_list_status(first_date=update_time)
-#        print('get list status has been completed.../n')
-#        self.get_asset_liability_equity(first_date=update_time)
-#        print('get balancesheet data has been completed.../n')
-#        self.get_pb()
-#        self.get_ni_fy1_fy2()
-#        self.get_eps_fy1_fy2()
-#        print('get forecast data has been completed.../n')
-#        self.get_cash_earings_ttm()
-#        print('get cash earnings ttm has been completed.../n')
-#        self.get_ni_ttm()
-#        print('get netincome ttm has been completed.../n')
-#        self.get_pe_ttm()
-#        self.get_ni_revenue_eps_growth()
-#        print('get growth ttm has been completed.../n')
-#        self.get_index_price()
-#        self.get_index_weight(first_date=update_time)
-#        print('get index data has been completed.../n')
-#
-#        # 更新数据的情况先不能储存数据，只有非更新的情况才能储存
-#        if not self.is_update:
-#            self.save_data()
+        self.get_Volume()
+        self.get_total_and_free_mv()
+        self.get_total_and_free_shares()
+        self.get_Industry()
+        self.get_is_suspended()
+        print('get sq data has been completed...\n')
+        self.get_list_status(first_date=update_time)
+        print('get list status has been completed...\n')
+        self.get_asset_liability_equity(first_date=update_time)
+        print('get balancesheet data has been completed...\n')
+        self.get_pb()
+        self.get_ni_fy1_fy2()
+        self.get_eps_fy1_fy2()
+        print('get forecast data has been completed...\n')
+        self.get_cash_earings_ttm()
+        print('get cash earnings ttm has been completed...\n')
+        self.get_ni_ttm()
+        print('get netincome ttm has been completed...\n')
+        self.get_pe_ttm()
+        self.get_ni_revenue_eps_growth()
+        print('get growth ttm has been completed...\n')
+        self.get_index_price()
+        self.get_index_weight(first_date=update_time)
+        print('get index data has been completed...\n')
+
+        # 更新数据的情况先不能储存数据，只有非更新的情况才能储存
+        if not self.is_update:
+           self.save_data()
 
     # 更新数据的主函数
     def update_data_from_db(self, *, end_date='default'):
@@ -559,8 +571,8 @@ if __name__ == '__main__':
     import time
     start_time = time.time()
     db = database(start_date='2007-01-01', end_date='2017-03-31')
-    db.get_data_from_db()
-#    db.update_data_from_db()
+#    db.get_data_from_db()
+    db.update_data_from_db(end_date='2017-04-27')
     print("time: {0} seconds\n".format(time.time()-start_time))
 
 

@@ -97,38 +97,6 @@ class performance_attribution(object):
         # 没有因子暴露数据，却在超额持仓中，会导致超额组合的暴露不正确。需要对这些股票的因子暴露进行修正
         adjusted_factor_expo = strategy_data.adjust_benchmark_related_expo(self.bb.bb_data.factor_expo,
                                 self.pa_position.holding_matrix, self.bb.bb_data.if_tradable.ix['if_tradable'])
-        # # 首先新建因子暴露数据，重索引为需要归因的时间段，并将nan填为0
-        # adjusted_factor_expo = self.bb.bb_data.factor_expo.reindex(
-        #     major_axis=self.pa_position.holding_matrix.index).fillna(0.0)
-        # # 接下来只有在超额归因的情况下才调整
-        # if self.is_benchmark:
-        #     # 得到那些有持仓，却不可交易的股票
-        #     held_but_nontradable = np.logical_and(self.pa_position.holding_matrix != 0.0,
-        #         np.logical_not(self.bb.bb_data.if_tradable.ix['if_tradable', self.pa_position.holding_matrix.index, :]))
-        #     # 首先调整非country factor因子
-        #     # 填充非country factor因子的原则，永远是用上一个可交易时的数据填充，不管那个数据是不是nan
-        #     for item in adjusted_factor_expo.items:
-        #         if item != 'country_factor':
-        #             # 创建用于fillna的expo，首先将可交易，且数据为nan的地方填成0，
-        #             # 这样可以保证之后需要填充的持有且不可交易的地方，会被上一个可交易时的值填充，即使上一个可交易时的值是nan
-        #             # 如果不这样做，则会被上一个可交易且非nan（有数据）的填充，损失真实性
-        #             tradable_and_null = np.logical_and(self.bb.bb_data.if_tradable.ix['if_tradable'],
-        #                                                self.bb.bb_data.factor_expo.ix[item].isnull())
-        #             # 乘以1为防止传引用
-        #             fillna_expo = self.bb.bb_data.factor_expo.ix[item] * 1
-        #             fillna_expo[tradable_and_null] = 0.0
-        #             # 这时用于fillna的expo就可以向前填充了，这里为nan的地方都是不可以交易的地方，
-        #             # 而向前填nan则意味着用可交易时的数据填充不可交易时的数据
-        #             fillna_expo = fillna_expo.fillna(method='ffill').reindex(index=self.pa_position.holding_matrix.index)
-        #             # 将每个因子中，那些持有且不可交易的股票暴露重新设置为nan
-        #             adjusted_factor_expo[item][held_but_nontradable] = np.nan
-        #             # 然后用fillna_expo的数据去填充这些nan，这样可以做到始终用上一个可交易时的数据填充，保证：
-        #             # 第一，有持仓却不可交易的地方永远是被上一个可交易的数据填充的，无论那个数据是不是nan
-        #             # 第二，无持仓且不可交易的地方仍然是0，虽然其取值不会影响后面的组合暴露的计算
-        #             adjusted_factor_expo[item] = adjusted_factor_expo[item].fillna(fillna_expo)
-        #     # 对于country factor，需要用1去填充，直接用1填充所有的nan数据即可，
-        #     adjusted_factor_expo['country_factor'] = self.bb.bb_data.factor_expo.ix['country_factor',
-        #         self.pa_position.holding_matrix.index, :].fillna(1.0)
         self.port_expo = np.einsum('ijk,jk->ji', adjusted_factor_expo,
             self.pa_position.holding_matrix.fillna(0))
         self.port_expo = pd.DataFrame(self.port_expo, index=self.pa_returns.index, 
@@ -220,7 +188,8 @@ class performance_attribution(object):
         ax1.set_title('The Cumulative Log Return of Factor Groups')
         ax1.legend(loc='best')
         plt.savefig(str(os.path.abspath('.')) + '/' + foldername + '/PA_RetSource.png', dpi=1200)
-        plt.savefig(pdfs, format='pdf')
+        if type(pdfs) != str:
+            plt.savefig(pdfs, format='pdf')
 
         # 第二张图分解组合的累计风格收益
         f2 = plt.figure()
@@ -231,7 +200,8 @@ class performance_attribution(object):
         ax2.set_title('The Cumulative Log Return of Style Factors')
         ax2.legend(self.port_pa_returns.columns[0:10], loc='best')
         plt.savefig(str(os.path.abspath('.')) + '/' + foldername + '/PA_CumRetStyle.png', dpi=1200)
-        plt.savefig(pdfs, format='pdf')
+        if type(pdfs) != str:
+            plt.savefig(pdfs, format='pdf')
 
         # 第三张图分解组合的累计行业收益
         # 行业图示只给出最大和最小的5个行业
@@ -256,7 +226,8 @@ class performance_attribution(object):
         ax3.set_title('The Cumulative Log Return of Industrial Factors')
         ax3.legend(loc='best', prop=chifont)
         plt.savefig(str(os.path.abspath('.'))+'/'+foldername+'/PA_CumRetIndus.png', dpi=1200)
-        plt.savefig(pdfs, format='pdf')
+        if type(pdfs) != str:
+            plt.savefig(pdfs, format='pdf')
 
         # 第四张图画组合的累计风格暴露
         f4 = plt.figure()
@@ -267,7 +238,8 @@ class performance_attribution(object):
         ax4.set_title('The Cumulative Style Factor Exposures of the Portfolio')
         ax4.legend(self.port_expo.columns[0:10], loc='best')
         plt.savefig(str(os.path.abspath('.'))+'/'+foldername+'/PA_CumExpoStyle.png', dpi=1200)
-        plt.savefig(pdfs, format='pdf')
+        if type(pdfs) != str:
+            plt.savefig(pdfs, format='pdf')
 
         # 第五张图画组合的累计行业暴露
         f5 = plt.figure()
@@ -284,7 +256,8 @@ class performance_attribution(object):
         ax5.set_title('The Cumulative Industrial Factor Exposures of the Portfolio')
         ax5.legend(loc='best', prop=chifont)
         plt.savefig(str(os.path.abspath('.'))+'/'+foldername+'/PA_CumExpoIndus.png', dpi=1200)
-        plt.savefig(pdfs, format='pdf')
+        if type(pdfs) != str:
+            plt.savefig(pdfs, format='pdf')
 
         # 第六张图画组合的每日风格暴露
         f6 = plt.figure()
@@ -295,7 +268,8 @@ class performance_attribution(object):
         ax6.set_title('The Style Factor Exposures of the Portfolio')
         ax6.legend(self.port_expo.columns[0:10], loc='best')
         plt.savefig(str(os.path.abspath('.'))+'/'+foldername+'/PA_ExpoStyle.png', dpi=1200)
-        plt.savefig(pdfs, format='pdf')
+        if type(pdfs) != str:
+            plt.savefig(pdfs, format='pdf')
 
         # 第七张图画组合的每日行业暴露
         f7 = plt.figure()
@@ -312,7 +286,20 @@ class performance_attribution(object):
         ax7.set_title('The Industrial Factor Exposures of the Portfolio')
         ax7.legend(loc='best', prop=chifont)
         plt.savefig(str(os.path.abspath('.'))+'/'+foldername+'/PA_ExpoIndus.png', dpi=1200)
-        plt.savefig(pdfs, format='pdf')
+        if type(pdfs) != str:
+            plt.savefig(pdfs, format='pdf')
+
+        # 第八张图画用于归因的bb的风格因子的纯因子收益率，即回归得到的因子收益率，仅供参考
+        f8 = plt.figure()
+        ax8 = f8.add_subplot(1, 1, 1)
+        plt.plot(self.pa_returns.ix[:, 0:10].cumsum(0)*100)
+        ax8.set_xlabel('Time')
+        ax8.set_ylabel('Cumulative Log Return (%)')
+        ax8.set_title('The Cumulative Log Return of Pure Style Factors Through Regression')
+        ax8.legend(self.pa_returns.columns[0:10], loc='best')
+        plt.savefig(str(os.path.abspath('.')) + '/' + foldername + '/PA_PureStyleFactorRet.png', dpi=1200)
+        if type(pdfs) != str:
+            plt.savefig(pdfs, format='pdf')
 
     # 进行业绩归因
     def execute_performance_attribution(self, *, outside_bb='Empty', discard_factor=[], show_warning=True, 

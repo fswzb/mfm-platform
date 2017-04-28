@@ -50,15 +50,12 @@ class strategy_data(data):
             self.if_tradable['if_inpool'] = self.benchmark_price.ix['Weight_'+self.stock_pool]>0
         # 若不在，则读取weight数据，文件名即为stock_pool
         else:
-            temp_weights = data.read_data(['Weight_'+self.stock_pool],['Weight_'+self.stock_pool])
+            temp_weights = data.read_data(['Weight_'+self.stock_pool],['Weight_'+self.stock_pool], shift=shift)
             if self.benchmark_price.empty:
                 self.benchmark_price = temp_weights
             else:
                 self.benchmark_price['Weight_'+self.stock_pool] = temp_weights['Weight_'+self.stock_pool]
             self.if_tradable['if_inpool'] = self.benchmark_price.ix['Weight_'+self.stock_pool]>0
-
-        if shift:
-            self.if_tradable['if_inpool'] = self.if_tradable['if_inpool'].shift(1)
 
         # 若还没有if_tradable，报错
         assert 'if_tradable' in self.if_tradable.items, 'Please generate if_tradable first!'
