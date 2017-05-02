@@ -122,9 +122,9 @@ class barra_base(object):
         if 'TotalAssets' not in self.bb_data.raw_data.items:
             TotalAssets = data.read_data(['TotalAssets'], ['TotalAssets'])
             self.bb_data.raw_data['TotalAssets'] = TotalAssets.ix['TotalAssets']
-        if 'Totalliability' not in self.bb_data.raw_data.items:
-            Totalliability = data.read_data(['Totalliability'], ['Totalliability'])
-            self.bb_data.raw_data['Totalliability'] = Totalliability.ix['Totalliability']
+        if 'TotalLiability' not in self.bb_data.raw_data.items:
+            TotalLiability = data.read_data(['TotalLiability'], ['TotalLiability'])
+            self.bb_data.raw_data['TotalLiability'] = TotalLiability.ix['TotalLiability']
         # 生成可交易及可投资数据
         self.bb_data.generate_if_tradable()
         self.bb_data.handle_stock_pool()
@@ -634,7 +634,7 @@ class barra_base(object):
             self.bb_data.factor['leverage'] = leverage.ix['leverage']
         else:
             # 用简单的资产负债率计算leverage
-            leverage = self.bb_data.raw_data.ix['Totalliability']/self.bb_data.raw_data.ix['TotalAssets']
+            leverage = self.bb_data.raw_data.ix['TotalLiability']/self.bb_data.raw_data.ix['TotalAssets']
             self.bb_data.factor['leverage'] = leverage
 
     # 计算风格因子的因子暴露
