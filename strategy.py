@@ -41,6 +41,11 @@ class strategy(object):
     # 将持仓矩阵归零的函数，（当要重复测试策略，不想初始化，直接改变选股条件时，会用到）
     def reset_position(self):
         self.position = position(self.position.holding_matrix)
+
+    # 对策略的原始数据进行描述，通过对原始数据的分析，得到启发
+    # 这里为一个空函数
+    def data_description(self):
+        pass
         
     # 选股函数，这里的选股函数为空
     def select_stocks(self):
