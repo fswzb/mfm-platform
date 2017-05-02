@@ -45,18 +45,18 @@ class database(object):
 
     # 初始化jydb
     def initialize_jydb(self):
-        self.jydb_engine = db_engine(server_type='mssql', driver='pyodbc', username='lishi.wang', password='Zhengli1!',
-                                     server_ip='192.168.66.12', port='1433', db_name='JYDB', add_info='driver=FreeTDS')
+        self.jydb_engine = db_engine(server_type='mssql', driver='pymssql', username='lishi.wang', password='Zhengli1!',
+                                     server_ip='192.168.66.12', port='1433', db_name='JYDB', add_info='')
 
     # 初始化sq
     def initialize_sq(self):
-        self.sq_engine = db_engine(server_type='mssql', driver='pyodbc', username='lishi.wang', password='Zhengli1!',
-                                   server_ip='192.168.66.12', port='1433', db_name='SmartQuant', add_info='driver=FreeTDS')
+        self.sq_engine = db_engine(server_type='mssql', driver='pymssql', username='lishi.wang', password='Zhengli1!',
+                                   server_ip='192.168.66.12', port='1433', db_name='SmartQuant', add_info='')
 
     # 初始化zyyx
     def initialize_gg(self):
-        self.gg_engine = db_engine(server_type='mssql', driver='pyodbc', username='lishi.wang', password='Zhengli1!',
-                                     server_ip='192.168.66.12', port='1433', db_name='GOGOAL', add_info='driver=FreeTDS')
+        self.gg_engine = db_engine(server_type='mssql', driver='pymssql', username='lishi.wang', password='Zhengli1!',
+                                     server_ip='192.168.66.12', port='1433', db_name='GOGOAL', add_info='')
 
     # 取交易日表
     def get_trading_days(self):
@@ -571,8 +571,10 @@ if __name__ == '__main__':
     import time
     start_time = time.time()
     db = database(start_date='2007-01-01', end_date='2017-03-31')
-#    db.get_data_from_db()
-    db.update_data_from_db(end_date='2017-04-27')
+    # db.get_data_from_db()
+    # db.update_data_from_db(end_date='2017-04-27')
+    db.initialize_jydb()
+    db.get_trading_days()
     print("time: {0} seconds\n".format(time.time()-start_time))
 
 

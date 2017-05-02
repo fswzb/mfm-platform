@@ -97,7 +97,7 @@ class performance_attribution(object):
         # 没有因子暴露数据，却在超额持仓中，会导致超额组合的暴露不正确。需要对这些股票的因子暴露进行修正
         adjusted_factor_expo = strategy_data.adjust_benchmark_related_expo(self.bb.bb_data.factor_expo,
                                 self.pa_position.holding_matrix, self.bb.bb_data.if_tradable.ix['if_tradable'])
-        self.port_expo = np.einsum('ijk,jk->ji', adjusted_factor_expo,
+        self.port_expo = np.einsum('ijk,jk->ji', adjusted_factor_expo.fillna(0),
             self.pa_position.holding_matrix.fillna(0))
         self.port_expo = pd.DataFrame(self.port_expo, index=self.pa_returns.index, 
                                       columns=self.bb.bb_data.factor_expo.items)

@@ -162,19 +162,19 @@ def sf_test_multiple_pools_parallel(factor, *, direction='+', bb_obj='Empty', di
 coverage = pd.read_csv('coverage.csv', index_col=0, parse_dates=True)
 coverage = coverage.shift(1)
 
-# 论文里的abnormal coverage
-from analyst_coverage import analyst_coverage
-ac = analyst_coverage()
-ac.get_factor_data()
-abn_coverage = ac.strategy_data.factor.ix['abn_coverage']
+# # 论文里的abnormal coverage
+# from analyst_coverage import analyst_coverage
+# ac = analyst_coverage()
+# ac.get_factor_data()
+# abn_coverage = ac.strategy_data.factor.ix['abn_coverage']
 
-# sf_test_multiple_pools(factor=mom, direction='+', bkt_start=pd.Timestamp('2009-03-06'), holding_freq='w',
-#                         bkt_end=pd.Timestamp('2017-03-30'), stock_pools=['zz500'],
-#                         do_bb_pure_factor=False, do_pa=True, select_method=2, do_active_pa=False)
+sf_test_multiple_pools(factor=coverage, direction='+', bkt_start=pd.Timestamp('2009-03-06'), holding_freq='m',
+                        bkt_end=pd.Timestamp('2017-03-30'), stock_pools=['hs300'],
+                        do_bb_pure_factor=False, do_pa=True, select_method=0, do_active_pa=True)
 
-sf_test_multiple_pools_parallel(factor=abn_coverage, direction='+', bkt_start=pd.Timestamp('2009-03-06'), holding_freq='w',
-                           bkt_end=pd.Timestamp('2017-03-30'), stock_pools=['hs300', 'zz500'],
-                           do_bb_pure_factor=False, do_pa=True, select_method=0, do_active_pa=True)
+# sf_test_multiple_pools_parallel(factor=coverage, direction='+', bkt_start=pd.Timestamp('2009-03-06'), holding_freq='w',
+#                            bkt_end=pd.Timestamp('2017-03-30'), stock_pools=['hs300', 'zz500'],
+#                            do_bb_pure_factor=False, do_pa=True, select_method=3, do_active_pa=True)
 
 
 

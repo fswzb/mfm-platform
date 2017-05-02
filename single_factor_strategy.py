@@ -229,7 +229,7 @@ class single_factor_strategy(strategy):
             benchmark_weight = (benchmark_weight.div(benchmark_weight.sum(1), axis=0)).fillna(0)
             adjusted_base_expo = strategy_data.adjust_benchmark_related_expo(base_expo,
                                     benchmark_weight, self.strategy_data.if_tradable.ix['if_tradable'])
-            benchmark_base_expo = np.einsum('ijk,jk->ji', adjusted_base_expo, benchmark_weight.fillna(0))
+            benchmark_base_expo = np.einsum('ijk,jk->ji', adjusted_base_expo.fillna(0), benchmark_weight.fillna(0))
             benchmark_base_expo = pd.DataFrame(benchmark_base_expo, index=base_expo.major_axis, columns=base_expo.items)
 
             adjusted_factor_expo = strategy_data.adjust_benchmark_related_expo(
@@ -639,7 +639,7 @@ class single_factor_strategy(strategy):
             adjusted_bb_expo = strategy_data.adjust_benchmark_related_expo(base_expo, benchmark_weight,
                                                                            self.strategy_data.if_tradable.ix[
                                                                                'if_tradable'])
-            benchmark_bb_expo = np.einsum('ijk,jk->ji', adjusted_bb_expo, benchmark_weight.fillna(0))
+            benchmark_bb_expo = np.einsum('ijk,jk->ji', adjusted_bb_expo.fillna(0), benchmark_weight.fillna(0))
             benchmark_bb_expo = pd.DataFrame(benchmark_bb_expo, index=base_expo.major_axis, columns=base_expo.items)
             # 计算当前因子的调整后暴露值，以及调整后benchmark在当前因子上的暴露
             adjusted_factor_expo = strategy_data.adjust_benchmark_related_expo(self.strategy_data.factor,
