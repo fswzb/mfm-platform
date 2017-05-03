@@ -31,7 +31,7 @@ from single_factor_strategy import single_factor_strategy
 def sf_test_multiple_pools(factor, *, direction='+', bb_obj='Empty', discard_factor=[], holding_freq='m',
                            stock_pools=['all', 'hs300', 'zz500', 'zz800'], bkt_start='default', bkt_end='default',
                            select_method=0, do_bb_pure_factor=False, do_active_bb_pure_factor=False,
-                           do_pa=False, do_active_pa=False):
+                           do_pa=False, do_active_pa=False, do_data_description=False):
     # 如果传入的是str，则读取同名文件，如果是dataframe，则直接传入因子
     # 注意：这里的因子数据并不储存到self.strategy_data.factor中，因为循环股票池会丢失数据
     # 这里实际上是希望每次循环都有一个新的single factor strategy对象，
@@ -56,7 +56,9 @@ def sf_test_multiple_pools(factor, *, direction='+', bb_obj='Empty', discard_fac
     # 根据股票池进行循环
     for stock_pool in stock_pools:
         # 建立单因子测试对象
-        curr_sf = single_factor_strategy()
+        # curr_sf = single_factor_strategy()
+        from analyst_coverage import analyst_coverage
+        curr_sf = analyst_coverage()
 
         # 进行当前股票池下的单因子测试
         # 注意bb obj进行了一份深拷贝，这是因为在业绩归因的计算中，会根据不同的股票池丢弃数据，导致数据不全，因此不能传引用
@@ -67,14 +69,15 @@ def sf_test_multiple_pools(factor, *, direction='+', bb_obj='Empty', discard_fac
                                    stock_pool=stock_pool, select_method=select_method,
                                    do_bb_pure_factor=do_bb_pure_factor,
                                    do_active_bb_pure_factor=do_active_bb_pure_factor,
-                                   do_pa=do_pa, do_active_pa=do_active_pa)
+                                   do_pa=do_pa, do_active_pa=do_active_pa,
+                                   do_data_description=do_data_description)
 
 # 根据多个股票池进行一次完整的单因子测试, 多进程版
 def sf_test_multiple_pools_parallel(factor, *, direction='+', bb_obj='Empty', discard_factor=[],
                                     stock_pools=['all', 'hs300', 'zz500', 'zz800'], bkt_start='default',
                                     bkt_end='default', select_method=0, do_bb_pure_factor=False,
                                     do_active_bb_pure_factor=False, do_pa=False,
-                                    do_active_pa=False, holding_freq='m'):
+                                    do_active_pa=False, holding_freq='m', do_data_description=False):
     # 如果传入的是str，则读取同名文件，如果是dataframe，则直接传入因子
     # 注意：这里的因子数据并不储存到self.strategy_data.factor中，因为循环股票池会丢失数据
     # 这里实际上是希望每次循环都有一个新的single factor strategy对象，
@@ -97,7 +100,9 @@ def sf_test_multiple_pools_parallel(factor, *, direction='+', bb_obj='Empty', di
               'data loss due to this situation!\n')
 
     def single_task(stock_pool):
-        curr_sf = single_factor_strategy()
+        # curr_sf = single_factor_strategy()
+        from analyst_coverage import analyst_coverage
+        curr_sf = analyst_coverage()
 
         # 进行当前股票池下的单因子测试
         # 注意bb obj进行了一份深拷贝，这是因为在业绩归因的计算中，会根据不同的股票池丢弃数据，导致数据不全，因此不能传引用
@@ -107,7 +112,7 @@ def sf_test_multiple_pools_parallel(factor, *, direction='+', bb_obj='Empty', di
                                    discard_factor=discard_factor, bkt_start=bkt_start, bkt_end=bkt_end,
                                    select_method=select_method, do_bb_pure_factor=do_bb_pure_factor,
                                    do_active_bb_pure_factor=do_active_bb_pure_factor, holding_freq=holding_freq,
-                                   do_pa=do_pa, do_active_pa=do_active_pa)
+                                   do_pa=do_pa, do_active_pa=do_active_pa, do_data_description=do_data_description)
 
     from multiprocessing import Process
     # 根据股票池进行循环
@@ -170,7 +175,8 @@ coverage = coverage.shift(1)
 
 sf_test_multiple_pools(factor=coverage, direction='+', bkt_start=pd.Timestamp('2009-03-06'), holding_freq='m',
                         bkt_end=pd.Timestamp('2017-03-30'), stock_pools=['hs300'],
-                        do_bb_pure_factor=False, do_pa=True, select_method=0, do_active_pa=True)
+                        do_bb_pure_factor=False, do_pa=False, select_method=0, do_active_pa=False,
+                       do_data_description=True)
 
 # sf_test_multiple_pools_parallel(factor=coverage, direction='+', bkt_start=pd.Timestamp('2009-03-06'), holding_freq='w',
 #                            bkt_end=pd.Timestamp('2017-03-30'), stock_pools=['hs300', 'zz500'],

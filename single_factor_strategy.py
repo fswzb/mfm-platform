@@ -665,13 +665,23 @@ class single_factor_strategy(strategy):
 
     # 根据一个股票池进行一次完整的单因子测试的函数
     # select method为单因子测试策略的选股方式，0为按比例选股，1为分行业按比例选股
-    def single_factor_test(self, *, factor, direction='+', bkt_obj='Empty', bb_obj='Empty', pa_benchmark_weight='default',
-                           discard_factor=[], bkt_start='default', bkt_end='default', stock_pool='all', select_method=0,
-                           do_pa=True, do_active_pa=False, do_bb_pure_factor=False, do_active_bb_pure_factor=False,
-                           holding_freq='m'):
+    def single_factor_test(self, *, factor='default', direction='+', bkt_obj='Empty', bb_obj='Empty',
+                           pa_benchmark_weight='default', discard_factor=[], bkt_start='default', bkt_end='default',
+                           stock_pool='all', select_method=0, do_pa=True, do_active_pa=False, do_bb_pure_factor=False,
+                           do_active_bb_pure_factor=False, holding_freq='m', do_data_description=False):
         # 如果传入的是str，则读取同名文件，如果是dataframe，则直接传入因子
         if type(factor) == str:
-            self.read_factor_data([factor], [factor], shift=True)
+            if factor != 'default':
+                self.read_factor_data([factor], [factor], shift=True)
+            # 检测是否已经有因子存在,因为有可能该实例化的类已经有了计算好的要测试的因子
+            elif self.strategy_data.factor.shape[0]>=1:
+                print('The factor has been set to be the FIRST one in strategy_data.factor\n')
+            elif self.strategy_data.factor_expo.shape[0]>=1:
+                self.strategy_data.factor = self.strategy_data.factor_expo
+                print('The factor data has been copied from factor_expo data, and the factor will be'
+                      'the FIRST one in strategy_data.factor_expo\n')
+            else:
+                print('Error: No factor data, please try to specify a factor!\n')
         elif self.strategy_data.factor.empty:
             self.strategy_data.factor = pd.Panel({'factor_one':factor})
         else:
@@ -696,6 +706,17 @@ class single_factor_strategy(strategy):
             self.strategy_data.discard_untradable_data()
         else:
             self.strategy_data.discard_uninv_data()
+
+        # 如果没有文件夹，则建立一个文件夹
+        if not os.path.exists(str(os.path.abspath('.')) + '/' + self.strategy_data.stock_pool + '/'):
+            os.makedirs(str(os.path.abspath('.')) + '/' + self.strategy_data.stock_pool + '/')
+        # 建立画pdf的对象
+        self.pdfs = PdfPages(str(os.path.abspath('.')) + '/' + self.strategy_data.stock_pool + '/allfigs.pdf')
+
+        # 如果有对原始数据的表述,则进行原始数据表述
+        if do_data_description:
+            self.data_description()
+            print('Data description completed...\n')
 
         # 如果有传入的bb对象
         if bb_obj == 'Empty':
@@ -756,12 +777,6 @@ class single_factor_strategy(strategy):
         # 将回测的基准改为当前的股票池，若为all，则用默认的基准值
         if stock_pool != 'all':
             bkt_obj.reset_bkt_benchmark(['ClosePrice_' + stock_pool, 'OpenPrice_' + stock_pool])
-
-        # 如果没有文件夹，则建立一个文件夹
-        if not os.path.exists(str(os.path.abspath('.')) + '/' + self.strategy_data.stock_pool + '/'):
-            os.makedirs(str(os.path.abspath('.')) + '/' + self.strategy_data.stock_pool + '/')
-        # 建立画pdf的对象
-        self.pdfs = PdfPages(str(os.path.abspath('.')) + '/' + self.strategy_data.stock_pool + '/allfigs.pdf')
 
         # 回测、画图、归因
         bkt_obj.execute_backtest()
