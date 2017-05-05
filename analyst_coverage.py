@@ -25,7 +25,6 @@ from database import database
 from data import data
 from strategy_data import strategy_data
 from strategy import strategy
-from DrawTable import DrawTable
 
 # 分析师预测覆盖因子的单因子策略
 
@@ -37,7 +36,7 @@ class analyst_coverage(single_factor_strategy):
     def __init__(self):
         single_factor_strategy.__init__(self)
         # 该策略用于取数据的database类
-        self.db = database(start_date='2007-01-01', end_date='2017-03-31')
+        self.db = database(start_date='2007-01-01', end_date='2017-04-27')
 
     # 取计算分析师覆盖因子的原始数据
     def get_coverage_number(self):
@@ -62,20 +61,126 @@ class analyst_coverage(single_factor_strategy):
         coverage = coverage.resample('d').sum().dropna(axis=0, how='all')
         # 对过去90天进行rolling求和，注意，coverage的日期索引包含非交易日
         rolling_coverage = coverage.rolling(90, min_periods=0).apply(lambda x:np.nansum(x))
-        # 将日期重索引为交易日后再shift
         # 策略数据，注意shift
         rolling_coverage = rolling_coverage.reindex(self.strategy_data.stock_price.major_axis).shift(1)
         # 将其储存到raw_data中，顺便将stock code重索引为标准的stock code
         self.strategy_data.raw_data = pd.Panel({'coverage':rolling_coverage}, major_axis=
             self.strategy_data.stock_price.major_axis, minor_axis=self.strategy_data.stock_price.minor_axis)
 
+    # 计算滚动期内的唯一分析师分析数据
+    def get_unique_coverage_number(self, *, rolling_days=90):
+        self.db.initialize_jydb()
+        self.db.initialize_sq()
+        self.db.initialize_gg()
+        self.db.get_trading_days()
+        self.db.get_labels()
+
+        # 先将时间期内的所有数据都取出来
+        sql_query = "select create_date, code, organ_id, author, Time_year, forecast_profit from " \
+                    "((select id, code, organ_id, author, create_date from DER_REPORT_RESEARCH where " \
+                    "create_date>='" + str(self.db.trading_days.iloc[0]) + "' and create_date<='" + \
+                    str(self.db.trading_days.iloc[-1]) + "') a " \
+                    "left join (select report_search_id as id, Time_year, forecast_profit from DER_REPORT_SUBTABLE) b " \
+                    "on a.id=b.id) " \
+                    "order by create_date, code "
+        original_data = self.db.gg_engine.get_original_data(sql_query)
+        # 先构造一个pivot table,主要目的是为了取时间
+        date_mark = original_data.pivot_table(index='create_date', columns='code', values='forecast_profit')
+        # 因为数据有每天不同时点的数据,因此要resample
+        date_mark = date_mark.resample('d').mean().dropna(axis=0, how='all')
+        # 建立储存数据的dataframe
+        coverage = date_mark * np.nan
+        # 根据得到的时间索引进行循环
+        for cursor, time in enumerate(date_mark.index):
+            # 取最近的60天
+            end_time = time
+            start_time = end_time - pd.DateOffset(days=rolling_days-1)
+            # 满足最近60天条件的项
+            condition = np.logical_and(original_data['create_date'] >= start_time,
+                                       original_data['create_date'] <= end_time)
+            recent_data = original_data[condition]
+            # 对股票分组
+            grouped = recent_data.groupby('code')
+            # 分组汇总, 若机构id,作者,预测年份都一样,则删除重复的项,然后再汇总一共有多少预测ni的报告(ni值非nan)
+            curr_coverage = grouped.apply(lambda x:x.drop_duplicates(subset=['organ_id', 'author',
+                                          'Time_year'])['forecast_profit'].count())
+            # 储存此数据
+            coverage.ix[time, :] = curr_coverage
+            print(time)
+        pass
+
+        # 策略数据需要shift, 先shift再重索引为交易日,这样星期一早上能知道上周末的信息,而不是上周5的信息
+        coverage = coverage.shift(1)
+        # 将其储存到raw_data中,对交易日和股票代码的重索引均在这里完成
+        self.strategy_data.raw_data = pd.Panel({'coverage':coverage}, major_axis=
+            self.strategy_data.stock_price.major_axis, minor_axis=self.strategy_data.stock_price.minor_axis)
+
+    # 计算滚动期内的唯一分析师分析数据
+    def get_unique_coverage_number_parallel(self, *, rolling_days=90):
+        self.db.initialize_jydb()
+        self.db.initialize_sq()
+        self.db.initialize_gg()
+        self.db.get_trading_days()
+        self.db.get_labels()
+
+        # 先将时间期内的所有数据都取出来
+        sql_query = "select create_date, code, organ_id, author, Time_year, forecast_profit from " \
+                    "((select id, code, organ_id, author, create_date from DER_REPORT_RESEARCH where " \
+                    "create_date>='" + str(self.db.trading_days.iloc[0]) + "' and create_date<='" + \
+                    str(self.db.trading_days.iloc[-1]) + "') a " \
+                                                         "left join (select report_search_id as id, Time_year, forecast_profit from DER_REPORT_SUBTABLE) b " \
+                                                         "on a.id=b.id) " \
+                                                         "order by create_date, code "
+        original_data = self.db.gg_engine.get_original_data(sql_query)
+        # 先构造一个pivot table,主要目的是为了取时间
+        date_mark = original_data.pivot_table(index='create_date', columns='code', values='forecast_profit')
+        # 因为数据有每天不同时点的数据,因此要resample
+        date_mark = date_mark.resample('d').mean().dropna(axis=0, how='all')
+        # 建立储存数据的dataframe
+        coverage = date_mark * np.nan
+        # 计算每期的coverage的函数
+        def one_time_coverage(cursor):
+            # 得到对应位置的时间索引,取为截至时间
+            end_time = date_mark.index[cursor]
+            start_time = end_time - pd.DateOffset(days=rolling_days - 1)
+            # 满足最近60天条件的项
+            condition = np.logical_and(original_data['create_date'] >= start_time,
+                                       original_data['create_date'] <= end_time)
+            recent_data = original_data[condition]
+            # 对股票分组
+            grouped = recent_data.groupby('code')
+            # 分组汇总, 若机构id,作者,预测年份都一样,则删除重复的项,然后再汇总一共有多少预测ni的报告(ni值非nan)
+            curr_coverage = grouped.apply(lambda x: x.drop_duplicates(subset=['organ_id', 'author',
+                                          'Time_year'])['forecast_profit'].count())
+            # 储存此数据
+            print(end_time)
+            return curr_coverage
+        # 进行并行计算
+        import pathos.multiprocessing as mp
+        if __name__ == '__main__':
+            ncpus = 16
+            p = mp.ProcessPool(ncpus)
+            data_size = np.arange(date_mark.shape[0])
+            chunksize=int(len(data_size)/ncpus)
+            results = p.map(one_time_coverage, data_size, chunksize=chunksize)
+            temp_coverage = pd.concat([i for i in results], axis=1).T
+            coverage[:] = temp_coverage.values
+        pass
+
+        # # 策略数据需要shift, 先shift再重索引为交易日,这样星期一早上能知道上周末的信息,而不是上周5的信息
+        # coverage = coverage.shift(1)
+        # 将其储存到raw_data中,对交易日和股票代码的重索引均在这里完成
+        self.strategy_data.raw_data = pd.Panel({'coverage': coverage}, major_axis=
+        self.strategy_data.stock_price.major_axis, minor_axis=self.strategy_data.stock_price.minor_axis)
+        data.write_data(self.strategy_data.raw_data, file_name=['unique_coverage'])
+
     # 计算因子值
     def get_abn_coverage(self):
-        if os.path.isfile('coverage.csv'):
-            self.strategy_data.raw_data = data.read_data(['coverage'], ['coverage'], shift=True)
+        if os.path.isfile('unique_coverage.csv'):
+            self.strategy_data.raw_data = data.read_data(['unique_coverage'], ['coverage'], shift=True)
             print('reading coverage\n')
         else:
-            self.get_coverage_number()
+            self.get_unique_coverage_number_parallel()
             print('getting coverage\n')
 
         # 计算ln(1+coverage)得到回归的y项
@@ -104,7 +209,7 @@ class analyst_coverage(single_factor_strategy):
             x = self.strategy_data.stock_price.ix[['lncap', 'turnover', 'momentum'], time, :]
             x = sm.add_constant(x)
             # 如果只有小于等于1个有效数据，则返回nan序列
-            if pd.concat([y, x], axis=1).dropna().shape[0] <= 1:
+            if pd.concat([y, x], axis=1).dropna().shape[0] <= 3:
                 continue
             model = sm.OLS(y, x, missing='drop')
             results = model.fit()
@@ -119,11 +224,11 @@ class analyst_coverage(single_factor_strategy):
                     self.strategy_data.stock_price.major_axis, minor_axis=self.strategy_data.stock_price.minor_axis)
 
     def get_table1a(self):
-        if os.path.isfile('coverage.csv'):
-            self.strategy_data.raw_data = data.read_data(['coverage'], ['coverage'], shift=True)
+        if os.path.isfile('unique_coverage.csv'):
+            self.strategy_data.raw_data = data.read_data(['unique_coverage'], ['coverage'], shift=True)
             print('reading coverage\n')
         else:
-            self.get_coverage_number()
+            self.get_unique_coverage_number_parallel()
             print('getting coverage\n')
 
         # 计算ln(1+coverage)得到回归的y项
@@ -153,7 +258,7 @@ class analyst_coverage(single_factor_strategy):
             x = self.strategy_data.stock_price.ix[['lncap', 'turnover', 'momentum'], time, :]
             x = sm.add_constant(x)
             # 如果只有小于等于1个有效数据，则返回nan序列
-            if pd.concat([y, x], axis=1).dropna().shape[0] <= 1:
+            if pd.concat([y, x], axis=1).dropna().shape[0] <= 3:
                 continue
             model = sm.OLS(y, x, missing='drop')
             results = model.fit()
@@ -167,7 +272,7 @@ class analyst_coverage(single_factor_strategy):
         self.strategy_data.stock_price['abn_coverage'] = abn_coverage
 
         # 对回归得到的系数取平均值
-        self.table1a = self.reg_stats.mean(axis=1)
+        self.table1a = self.reg_stats.replace(np.inf, np.nan).mean(axis=1)
         # 画表
         fig, ax = plt.subplots(figsize=(12, 6))
         ax.xaxis.set_visible(False)
@@ -249,7 +354,7 @@ class analyst_coverage(single_factor_strategy):
                 x = x_data.ix[0:k, time, :]
                 x = sm.add_constant(x)
                 # 如果只有小于等于1个有效数据，则返回nan序列
-                if pd.concat([y, x], axis=1).dropna().shape[0] <= 1:
+                if pd.concat([y, x], axis=1).dropna().shape[0] <= k:
                     continue
                 model = sm.OLS(y, x, missing='drop')
                 results = model.fit()
@@ -259,7 +364,7 @@ class analyst_coverage(single_factor_strategy):
             self.figure2.ix['r_square', k-1] = reg_results.ix[:, 0].mean()
             k += 1
         # 当结束最后一次循环的时候, 储存各回归系数的t stats
-        self.figure2.ix['t_stats', :] = reg_results.ix[:, 1:].mean().values
+        self.figure2.ix['t_stats', :] = reg_results.ix[:, 1:].replace(np.inf, np.nan).mean().values
         # 画表
         fig, ax = plt.subplots(figsize=(12, 6))
         ax.xaxis.set_visible(False)
@@ -305,14 +410,14 @@ class analyst_coverage(single_factor_strategy):
                 x = x_data.ix[:, time, :]
                 x = sm.add_constant(x)
                 # 对于2个回归,只有在有一个以上有效数据的情况下才回归
-                if pd.concat([ya, x], axis=1).dropna().shape[0] > 1:
+                if pd.concat([ya, x], axis=1).dropna().shape[0] > 5:
                     modela = sm.OLS(ya, x, missing='drop')
                     resultsa = modela.fit()
                     reg_results_a.ix['coef', time, 0:5] = resultsa.params[1:].values
                     reg_results_a.ix['t_stats', time, 0:5] = resultsa.tvalues[1:].values
                     reg_results_a.ix['coef', time, 5] = resultsa.rsquared
                     reg_results_a.ix['t_stats', time, 5] = resultsa.rsquared_adj
-                if pd.concat([yb, x], axis=1).dropna().shape[0] > 1:
+                if pd.concat([yb, x], axis=1).dropna().shape[0] > 5:
                     modelb = sm.OLS(yb, x, missing='drop')
                     resultsb = modelb.fit()
                     reg_results_b.ix['coef', time, 0:5] = resultsb.params[1:].values
@@ -320,10 +425,10 @@ class analyst_coverage(single_factor_strategy):
                     reg_results_b.ix['coef', time, 5] = resultsb.rsquared
                     reg_results_b.ix['t_stats', time, 5] = resultsb.rsquared_adj
             # 循环结束,计算回归结果平均数并储存
-            self.table3a.ix['coef', :, next_q] = reg_results_a.ix['coef', :, :].mean()
-            self.table3a.ix['t_stats', :, next_q] = reg_results_a.ix['t_stats', :, :].mean()
-            self.table3b.ix['coef', :, next_q] = reg_results_b.ix['coef', :, :].mean()
-            self.table3b.ix['t_stats', :, next_q] = reg_results_b.ix['t_stats', :, :].mean()
+            self.table3a.ix['coef', :, next_q] = reg_results_a.ix['coef', :, :].replace(np.inf, np.nan).mean()
+            self.table3a.ix['t_stats', :, next_q] = reg_results_a.ix['t_stats', :, :].replace(np.inf, np.nan).mean()
+            self.table3b.ix['coef', :, next_q] = reg_results_b.ix['coef', :, :].replace(np.inf, np.nan).mean()
+            self.table3b.ix['t_stats', :, next_q] = reg_results_b.ix['t_stats', :, :].replace(np.inf, np.nan).mean()
         pass
         # 画表
         fig, ax = plt.subplots(figsize=(12, 6))
@@ -390,7 +495,7 @@ class analyst_coverage(single_factor_strategy):
                 x = x_data.ix[:k, time, :]
                 x = sm.add_constant(x)
                 # 对于2个回归,只有在有一个以上有效数据的情况下才回归
-                if pd.concat([y, x], axis=1).dropna().shape[0] <= 1:
+                if pd.concat([y, x], axis=1).dropna().shape[0] <= k:
                     continue
                 model = sm.OLS(y, x, missing='drop')
                 results = model.fit()
@@ -402,7 +507,7 @@ class analyst_coverage(single_factor_strategy):
                 reg_results.ix['t_stats', time, -2] = results.tvalues[0]
                 reg_results.ix['t_stats', time, -1] = results.rsquared_adj
             # 循环结束,求平均值储存
-            self.table6.ix[:, :, k-1] = reg_results.mean(axis=1)
+            self.table6.ix[:, :, k-1] = reg_results.replace(np.inf, np.nan).mean(axis=1)
             k += 1
         # 画表
         fig, ax = plt.subplots(figsize=(12, 6))
@@ -434,6 +539,7 @@ class analyst_coverage(single_factor_strategy):
 if __name__ == '__main__':
     ac = analyst_coverage()
     ac.data_description()
+    # ac.get_unique_coverage_number_parallel()
 
 
 

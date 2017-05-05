@@ -114,10 +114,14 @@ def sf_test_multiple_pools_parallel(factor, *, direction='+', bb_obj='Empty', di
                                    do_active_bb_pure_factor=do_active_bb_pure_factor, holding_freq=holding_freq,
                                    do_pa=do_pa, do_active_pa=do_active_pa, do_data_description=do_data_description)
 
-    from multiprocessing import Process
+    import multiprocessing as mp
+    mp.set_start_method('fork')
     # 根据股票池进行循环
     for stock_pool in stock_pools:
-        Process(target=single_task, args=(stock_pool,)).start()
+        p = mp.Process(target=single_task, args=(stock_pool,))
+        p.start()
+
+
 
 
 # 进行单因子测试
@@ -164,7 +168,7 @@ def sf_test_multiple_pools_parallel(factor, *, direction='+', bb_obj='Empty', di
 # contrarian = contrarian.shift(1)
 
 # 测试analyst coverage
-coverage = pd.read_csv('coverage.csv', index_col=0, parse_dates=True)
+coverage = pd.read_csv('unique_coverage.csv', index_col=0, parse_dates=True)
 coverage = coverage.shift(1)
 
 # # 论文里的abnormal coverage
@@ -173,14 +177,15 @@ coverage = coverage.shift(1)
 # ac.get_factor_data()
 # abn_coverage = ac.strategy_data.factor.ix['abn_coverage']
 
-sf_test_multiple_pools(factor=coverage, direction='+', bkt_start=pd.Timestamp('2009-03-06'), holding_freq='m',
-                        bkt_end=pd.Timestamp('2017-03-30'), stock_pools=['hs300'],
-                        do_bb_pure_factor=False, do_pa=False, select_method=0, do_active_pa=False,
-                       do_data_description=True)
+# sf_test_multiple_pools(factor=coverage, direction='+', bkt_start=pd.Timestamp('2009-03-06'), holding_freq='m',
+#                        bkt_end=pd.Timestamp('2017-03-30'), stock_pools=['hs300'],
+#                        do_bb_pure_factor=False, do_pa=True, select_method=3, do_active_pa=True,
+#                        do_data_description=True)
 
-# sf_test_multiple_pools_parallel(factor=coverage, direction='+', bkt_start=pd.Timestamp('2009-03-06'), holding_freq='w',
-#                            bkt_end=pd.Timestamp('2017-03-30'), stock_pools=['hs300', 'zz500'],
-#                            do_bb_pure_factor=False, do_pa=True, select_method=3, do_active_pa=True)
+sf_test_multiple_pools_parallel(factor=coverage, direction='+', bkt_start=pd.Timestamp('2009-03-31'), holding_freq='m',
+                                bkt_end=pd.Timestamp('2017-04-26'), stock_pools=['all','hs300','zz500','zz800'],
+                                do_bb_pure_factor=False, do_pa=True, select_method=3, do_active_pa=True,
+                                do_data_description=True)
 
 
 

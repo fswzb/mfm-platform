@@ -815,6 +815,7 @@ class single_factor_strategy(strategy):
 
 
 
+
                 
         
         
