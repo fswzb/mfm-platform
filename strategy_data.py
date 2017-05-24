@@ -399,6 +399,33 @@ class strategy_data(data):
 
         return adjusted_expo
 
+    # 计算净利润增长率的函数, 因为净利润增长, 涉及净利润是负数的情况比较麻烦, 所以专门写一个函数来计算
+    # annualize_term为年化增长率的参数, 若增长率为每天, 则参数为1/252, 若为2年, 则为2
+    @staticmethod
+    def get_ni_growth(ni_data, *, lag=1, annualize_term=0):
+        former = ni_data.shift(lag)
+        latter = ni_data * 1
+        final_growth = ni_data * np.nan
+        # 前后都大于0的情况, 直接算增长率
+        growth = np.where(np.logical_and(latter>0, former>0), latter/former-1, np.nan)
+        # 后为大于0, 前为小于0的情况, 这样实际增长了很多
+        growth = np.where(np.logical_and(latter>0, former<0), 1-latter/former, growth)
+        # 后为小于0, 前为大于0的情况, 这样实际减少了很多
+        growth = np.where(np.logical_and(latter<0, former>0), latter/former-1, growth)
+        # 两者都小于0的情况, 在算了增长率后要加负号才正确
+        growth = np.where(np.logical_and(latter<0, former<0), 1-latter/former, growth)
+
+        final_growth[:] = growth
+
+        # 进行年化的调整
+        if annualize_term != 0:
+            final_growth = (final_growth+1) ** (1/annualize_term) - 1
+
+        return final_growth
+
+
+
+
         
         
         

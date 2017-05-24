@@ -19,7 +19,6 @@ from strategy_data import strategy_data
 from position import position
 from barra_base import barra_base
 
-
 # 业绩归因类，对策略中的股票收益率（注意：并非策略收益率）进行归因
 
 class performance_attribution(object):
@@ -119,8 +118,8 @@ class performance_attribution(object):
 
         # 如果需要，则直接根据股票收益算出组合的收益
         if not self.is_port_ret_imported:
-            self.port_returns = self.pa_position.holding_matrix.mul(self.bb.bb_data.stock_price.ix['daily_return']). \
-                reindex(self.pa_position.holding_matrix.index).sum(1)
+            from backtest import backtest
+            self.port_returns = backtest.ideal_world_backtest(self.pa_position.holding_matrix)
 
         # 残余收益，即alpha收益，为组合收益减去之前那些因子的收益
         # 注意下面会提到，缺失数据会使得残余收益变大

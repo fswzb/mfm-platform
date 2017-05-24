@@ -12,7 +12,6 @@ import pandas as pd
 import matplotlib
 matplotlib.use('PDF')  # Do this BEFORE importing matplotlib.pyplot
 import matplotlib.pyplot as plt
-import matplotlib.pyplot as plt
 from pandas import Series, DataFrame, Panel
 from datetime import datetime
 import os
@@ -43,7 +42,7 @@ def sf_test_multiple_pools(factor, *, direction='+', bb_obj='Empty', discard_fac
     # 初始化一个持仓对象，以用来初始化backtest对象，索引以factor为标准
     temp_position = position(factor)
     # 先要初始化bkt对象
-    bkt_obj = backtest(temp_position, bkt_start=bkt_start, bkt_end=bkt_end)
+    bkt_obj = backtest(temp_position, bkt_start=bkt_start, bkt_end=bkt_end, buy_cost=0, sell_cost=0)
     # 建立bb对象，否则之后每次循环都要建立一次新的bb对象
     if bb_obj == 'Empty':
         bb_obj = barra_base()
@@ -89,7 +88,7 @@ def sf_test_multiple_pools_parallel(factor, *, direction='+', bb_obj='Empty', di
     # 初始化一个持仓对象，以用来初始化backtest对象，索引以factor为标准
     temp_position = position(factor)
     # 先要初始化bkt对象
-    bkt_obj = backtest(temp_position, bkt_start=bkt_start, bkt_end=bkt_end)
+    bkt_obj = backtest(temp_position, bkt_start=bkt_start, bkt_end=bkt_end, buy_cost=0, sell_cost=0)
     # 建立bb对象，否则之后每次循环都要建立一次新的bb对象
     if bb_obj == 'Empty':
         bb_obj = barra_base()
@@ -167,25 +166,25 @@ def sf_test_multiple_pools_parallel(factor, *, direction='+', bb_obj='Empty', di
 # contrarian = pd.read_csv('contrarian.csv', index_col=0, parse_dates=True)
 # contrarian = contrarian.shift(1)
 
-# 测试analyst coverage
-coverage = pd.read_csv('unique_coverage.csv', index_col=0, parse_dates=True)
-coverage = coverage.shift(1)
+# # 测试analyst coverage
+# coverage = pd.read_csv('unique_coverage.csv', index_col=0, parse_dates=True)
+# coverage = coverage.shift(1)
+#
+# 论文里的abnormal coverage
+from analyst_coverage import analyst_coverage
+ac = analyst_coverage()
+ac.get_abn_coverage()
+abn_coverage = ac.strategy_data.factor.ix['abn_coverage']
 
-# # 论文里的abnormal coverage
-# from analyst_coverage import analyst_coverage
-# ac = analyst_coverage()
-# ac.get_factor_data()
-# abn_coverage = ac.strategy_data.factor.ix['abn_coverage']
+sf_test_multiple_pools(factor=abn_coverage, direction='+', bkt_start=pd.Timestamp('2009-04-01'), holding_freq='m',
+                       bkt_end=pd.Timestamp('2017-03-30'), stock_pools=['hs300'],
+                       do_bb_pure_factor=False, do_pa=True, select_method=0, do_active_pa=False,
+                       do_data_description=False)
 
-# sf_test_multiple_pools(factor=coverage, direction='+', bkt_start=pd.Timestamp('2009-03-06'), holding_freq='m',
-#                        bkt_end=pd.Timestamp('2017-03-30'), stock_pools=['hs300'],
-#                        do_bb_pure_factor=False, do_pa=True, select_method=3, do_active_pa=True,
-#                        do_data_description=True)
-
-sf_test_multiple_pools_parallel(factor=coverage, direction='+', bkt_start=pd.Timestamp('2009-03-31'), holding_freq='m',
-                                bkt_end=pd.Timestamp('2017-04-26'), stock_pools=['all','hs300','zz500','zz800'],
-                                do_bb_pure_factor=False, do_pa=True, select_method=3, do_active_pa=True,
-                                do_data_description=True)
+# sf_test_multiple_pools_parallel(factor=abn_coverage, direction='+', bkt_start=pd.Timestamp('2009-04-01'), holding_freq='m',
+#                                 bkt_end=pd.Timestamp('2017-04-26'), stock_pools=['all','hs300','zz500','zz800'],
+#                                 do_bb_pure_factor=False, do_pa=True, select_method=0, do_active_pa=True,
+#                                 do_data_description=False)
 
 
 

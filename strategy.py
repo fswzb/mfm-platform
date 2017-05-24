@@ -74,7 +74,8 @@ class strategy(object):
     # 传入的时间序列可以是series，也可以是dataframe
     @staticmethod
     def resample_tradingdays(time_series, *, freq='m'):
-        resampled_tds = time_series.resample(freq).apply(lambda x:x.index[-1] if x.size>0 else np.nan).dropna()
+        # 所取调仓日为每个调仓周期的第一天,注意调仓时间是调仓日的早上,即调仓日当天早上调仓时,拥有上一个周期的所有数据
+        resampled_tds = time_series.resample(freq).apply(lambda x:x.index[0] if x.size>0 else np.nan).dropna()
         # 将resampled_tds改为一个索引和值都是做好的交易日的series
         resampled_tds = pd.Series(resampled_tds.values, index=resampled_tds.values)
         return resampled_tds

@@ -84,7 +84,7 @@ class position(object):
             positive_part = input_series[input_series > 0]
             positive_part = positive_part.div(positive_part.sum())
             negative_part = input_series[input_series < 0]
-            negative_part = negative_part.div(negative_part.sum())
+            negative_part = negative_part.div(np.abs(negative_part.sum()))
             input_series[positive_part.index] = positive_part
             input_series[negative_part.index] = negative_part
             return input_series

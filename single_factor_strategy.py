@@ -552,6 +552,7 @@ class single_factor_strategy(strategy):
                 self.select_qgroup(no_of_groups, group + 1, direction=direction, weight=weight)
 
                 # 回测
+                bkt.enable_warning = False
                 bkt.reset_bkt_position(self.position)
                 bkt.execute_backtest()
                 bkt.initialize_performance()
@@ -596,6 +597,7 @@ class single_factor_strategy(strategy):
                 self.select_qgroup(no_of_groups, group + 1, direction=direction, weight=weight)
 
                 # 回测
+                bkt.enable_warning = False
                 bkt.reset_bkt_position(self.position)
                 bkt.execute_backtest()
                 bkt.initialize_performance()
@@ -741,7 +743,7 @@ class single_factor_strategy(strategy):
         # 按策略进行选股
         if select_method == 0:
             # 简单分位数选股
-            self.select_stocks(weight=1, direction=direction)
+            self.select_stocks(weight=1, direction=direction, select_ratio=[0.8, 1])
         elif select_method == 1:
             # 分行业选股
             self.select_stocks_within_indus(weight=2, direction=direction)
@@ -757,17 +759,22 @@ class single_factor_strategy(strategy):
             # # 构造纯因子组合，权重使用回归权重，即市值的根号
             # 初始化temp weight为'Empty'，即如果选股方法是2，则传入默认的benchmark weight
             temp_weight = 'Empty'
-            # self.select_stocks_pure_factor_bb(bb_expo=lag_bb_expo_no_cf, reg_weight=np.sqrt(
-            #     self.strategy_data.stock_price.ix['FreeMarketValue']), direction=direction)
+            if select_method == 2:
+                # self.select_stocks_pure_factor_bb(bb_expo=lag_bb_expo_no_cf, reg_weight=np.sqrt(
+                #     self.strategy_data.stock_price.ix['FreeMarketValue']), direction=direction)
+                self.select_stocks_pure_factor(base_expo=lag_bb_expo_no_cf, reg_weight=np.sqrt(
+                    self.strategy_data.stock_price.ix['FreeMarketValue']), direction=direction,
+                                               benchmark_weight=temp_weight, is_long_only=False)
             if select_method == 3 and self.strategy_data.stock_pool == 'all':
                 temp_weight = data.read_data(['Weight_zz500'], ['Weight_zz500'], shift=True)
                 temp_weight = temp_weight['Weight_zz500']
             elif select_method == 3 and self.strategy_data.stock_pool != 'all':
                 # 注意股票池为非全市场时，基准的权重数据已经shift过了
                 temp_weight = self.strategy_data.benchmark_price.ix['Weight_'+self.strategy_data.stock_pool]
-            self.select_stocks_pure_factor(base_expo=lag_bb_expo_no_cf, reg_weight=np.sqrt(
-                self.strategy_data.stock_price.ix['FreeMarketValue']), direction=direction,
-                benchmark_weight=temp_weight, is_long_only=True)
+            if select_method == 3:
+                self.select_stocks_pure_factor(base_expo=lag_bb_expo_no_cf, reg_weight=np.sqrt(
+                    self.strategy_data.stock_price.ix['FreeMarketValue']), direction=direction,
+                    benchmark_weight=temp_weight, is_long_only=True)
 
         # 如果有外来的backtest对象，则使用这个backtest对象，如果没有，则需要自己建立，同时传入最新持仓
         if bkt_obj == 'Empty':
