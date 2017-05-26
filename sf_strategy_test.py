@@ -27,7 +27,7 @@ from barra_base import barra_base
 from single_factor_strategy import single_factor_strategy
 
 # 根据多个股票池进行一次完整的单因子测试
-def sf_test_multiple_pools(factor, *, direction='+', bb_obj='Empty', discard_factor=[], holding_freq='m',
+def sf_test_multiple_pools(factor='default', *, direction='+', bb_obj='Empty', discard_factor=[], holding_freq='m',
                            stock_pools=['all', 'hs300', 'zz500', 'zz800'], bkt_start='default', bkt_end='default',
                            select_method=0, do_bb_pure_factor=False, do_active_bb_pure_factor=False,
                            do_pa=False, do_active_pa=False, do_data_description=False):
@@ -72,7 +72,7 @@ def sf_test_multiple_pools(factor, *, direction='+', bb_obj='Empty', discard_fac
                                    do_data_description=do_data_description)
 
 # 根据多个股票池进行一次完整的单因子测试, 多进程版
-def sf_test_multiple_pools_parallel(factor, *, direction='+', bb_obj='Empty', discard_factor=[],
+def sf_test_multiple_pools_parallel(factor='default', *, direction='+', bb_obj='Empty', discard_factor=[],
                                     stock_pools=['all', 'hs300', 'zz500', 'zz800'], bkt_start='default',
                                     bkt_end='default', select_method=0, do_bb_pure_factor=False,
                                     do_active_bb_pure_factor=False, do_pa=False,
@@ -173,7 +173,7 @@ def sf_test_multiple_pools_parallel(factor, *, direction='+', bb_obj='Empty', di
 # 论文里的abnormal coverage
 from analyst_coverage import analyst_coverage
 ac = analyst_coverage()
-ac.get_abn_coverage()
+ac.get_abn_coverage_poisson()
 abn_coverage = ac.strategy_data.factor.ix['abn_coverage']
 
 # sf_test_multiple_pools(factor=abn_coverage, direction='+', bkt_start=pd.Timestamp('2009-04-01'), holding_freq='m',

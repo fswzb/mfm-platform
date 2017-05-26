@@ -370,6 +370,65 @@ class analyst_coverage(single_factor_strategy):
         self.strategy_data.stock_price.ix['abn_coverage'] = strategy_data.get_exposure(abn_coverage,
                                                                            percentile=0, compress=False)
 
+    # 利用泊松回归来计算abn coverage
+    def get_abn_coverage_poisson(self):
+        if os.path.isfile('unique_coverage.csv'):
+            self.strategy_data.raw_data = data.read_data(['unique_coverage'], ['coverage'], shift=True)
+            print('reading coverage\n')
+        else:
+            self.get_unique_coverage_number_parallel()
+            print('getting coverage\n')
+
+        # 将覆盖原始数据填上0, 之后记得要过滤数据
+        self.strategy_data.raw_data.ix['coverage'] = self.strategy_data.raw_data.ix['coverage'].fillna(0)
+
+        # 计算lncap
+        self.strategy_data.stock_price['lncap'] = np.log(self.strategy_data.stock_price.ix['FreeMarketValue'])
+        # 计算turnover和momentum
+        data_to_be_used = data.read_data(['Volume', 'FreeShares', 'ClosePrice_adj'], shift=True)
+        turnover = (data_to_be_used.ix['Volume'] / data_to_be_used.ix['FreeShares']).rolling(252).sum()
+        daily_return = np.log(data_to_be_used.ix['ClosePrice_adj'] / data_to_be_used.ix['ClosePrice_adj'].shift(1))
+        momentum = daily_return.rolling(252).sum()
+        self.strategy_data.stock_price['daily_return'] = daily_return
+        self.strategy_data.stock_price['turnover'] = turnover
+        self.strategy_data.stock_price['momentum'] = momentum
+
+        # 过滤数据
+        self.strategy_data.handle_stock_pool(shift=True)
+        self.strategy_data.discard_uninv_data()
+
+        # 计算暴露
+        for item in ['lncap', 'turnover', 'momentum']:
+            self.strategy_data.stock_price.ix[item] = strategy_data.get_exposure(
+                self.strategy_data.stock_price.ix[item])
+
+        # 生成调仓日
+        self.generate_holding_days(holding_freq='m', start_date='2007-01-01')
+        # 建立储存数据的dataframe
+        abn_coverage = self.strategy_data.raw_data.ix['coverage', self.holding_days, :] * np.nan
+        self.reg_stats = pd.Panel(np.nan, items=['coef', 't_stats', 'rsquare'],
+                                  major_axis=self.holding_days, minor_axis=['int', 'lncap', 'turnover', 'momentum'])
+
+        from statsmodels.discrete.discrete_model import Poisson
+        # 对调仓日进行循环回归
+        for cursor, time in enumerate(self.holding_days):
+            y = self.strategy_data.raw_data.ix['coverage', time, :]
+            x = self.strategy_data.stock_price.ix[['lncap', 'turnover', 'momentum'], time, :]
+            x = sm.add_constant(x)
+            # 如果只有小于等于1个有效数据，则返回nan序列
+            if pd.concat([y, x], axis=1).dropna().shape[0] <= 3:
+                continue
+            P = Poisson(y, x, missing='drop')
+            results = P.fit(full_output=True)
+            abn_coverage.ix[time] = results.resid
+
+        abn_coverage = abn_coverage.reindex(self.strategy_data.stock_price.major_axis, method='ffill')
+        self.strategy_data.factor = pd.Panel({'abn_coverage': abn_coverage}, major_axis=
+        self.strategy_data.stock_price.major_axis, minor_axis=self.strategy_data.stock_price.minor_axis)
+        self.strategy_data.stock_price.ix['abn_coverage'] = strategy_data.get_exposure(abn_coverage,
+                                                                                       percentile=0, compress=False)
+
+
     # 定义进行fama-macbeth回归的函数, 因为论文中用到了大量的fm回归
     @staticmethod
     def fama_macbeth(y, x, *, nw_lags=0, intercept=True):
@@ -438,6 +497,7 @@ class analyst_coverage(single_factor_strategy):
         abn_coverage = self.strategy_data.raw_data.ix['ln_coverage', self.holding_days, :] * np.nan
         self.reg_stats = pd.Panel(np.nan, items=['coef', 't_stats', 'rsquare'],
                                   major_axis=self.holding_days, minor_axis=['int', 'lncap', 'turnover', 'momentum'])
+        from statsmodels.discrete.discrete_model import Poisson
         # 对调仓日进行循环回归
         for cursor, time in enumerate(self.holding_days):
             y = self.strategy_data.raw_data.ix['ln_coverage', time, :]
@@ -446,13 +506,15 @@ class analyst_coverage(single_factor_strategy):
             # 如果只有小于等于1个有效数据，则返回nan序列
             if pd.concat([y, x], axis=1).dropna().shape[0] <= 3:
                 continue
-            model = sm.OLS(y, x, missing='drop')
-            results = model.fit()
+            # model = sm.OLS(y, x, missing='drop')
+            # results = model.fit()
+            P = Poisson(y, x, missing='drop')
+            results = P.fit(full_output=True)
             abn_coverage.ix[time] = results.resid
             self.reg_stats.ix['coef', time, :] = results.params.values
             self.reg_stats.ix['t_stats', time, :] = results.tvalues.values
-            self.reg_stats.ix['rsquare', time, 0] = results.rsquared
-            self.reg_stats.ix['rsquare', time, 1] = results.rsquared_adj
+            # self.reg_stats.ix['rsquare', time, 0] = results.rsquared
+            # self.reg_stats.ix['rsquare', time, 1] = results.rsquared_adj
 
         abn_coverage = abn_coverage.reindex(self.strategy_data.stock_price.major_axis, method='ffill')
         # 再次对abn coverage计算暴露, 但是不再winsorize

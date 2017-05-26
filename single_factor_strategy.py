@@ -651,7 +651,7 @@ class single_factor_strategy(strategy):
             adjusted_factor_expo = adjusted_factor_expo.iloc[0]
             benchmark_factor_expo = (adjusted_factor_expo * benchmark_weight).sum(1)
             # 用暴露的绝对值减去基准的暴露值，得到相对基准的超额暴露值
-            bb_expo = base_expo.sub(benchmark_bb_expo, axis=0)
+            base_expo = base_expo.sub(benchmark_bb_expo, axis=0)
             factor_expo = factor_expo.sub(benchmark_factor_expo, axis=0)
         # 在bb expo里去掉国家因子，去掉是为了保证有唯一解，而且去掉后残差值不变，不影响结果
         # 因为国家因子向量已经能表示成行业暴露的线性组合了
