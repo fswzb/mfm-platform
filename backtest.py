@@ -56,10 +56,11 @@ class backtest(object):
                                                   ['ClosePrice_adj','OpenPrice_adj'])
         else:
             self.bkt_data.stock_price = data.read_data(bkt_stock_data)
-        # 初始化基准价格数据，默认设为中证500，只需要收盘数据
+        # 初始化基准价格数据，默认设为中证500，只需要收盘数据, 开盘数据只是为了初始化序列的第一个值
+        # 注意, 因为做空期货实际上做空的是指数的全收益序列, 因此我们要计算基准的全收益价格序列
+        # 基准指数的全收益价格序列没有开盘价, 因此只能全部用收盘价替代
         if bkt_benchmark_data == 'default':
-            self.bkt_data.benchmark_price = data.read_data(['ClosePrice_zz500','OpenPrice_zz500'], 
-                                                      ['ClosePrice','OpenPrice'])
+            self.bkt_data.benchmark_price = data.read_data(['ClosePrice_adj_zz500'], ['ClosePrice_adj'])
         else:
             self.bkt_data.benchmark_price = data.read_data([bkt_benchmark_data], [bkt_benchmark_data])
         # 读取股票上市退市停牌数据，并生成标记股票是否可交易的矩阵
@@ -157,7 +158,7 @@ class backtest(object):
         # 初始化回测得到的账户价值数据：
         self.account_value = []
         # 初始化计算业绩指标及作图用到的benchmark价值数据
-        self.benchmark_value = self.bkt_data.benchmark_price.ix['ClosePrice', :, 0]
+        self.benchmark_value = self.bkt_data.benchmark_price.ix['ClosePrice_adj', :, 0]
         # 初始化其他信息序列，包括换手率，持有的股票数等
         self.info_series = pd.DataFrame(0, index=self.cash.index, columns=['holding_value', 'sell_value',
                                             'buy_value', 'trading_value', 'turnover_ratio', 'cost_value',
@@ -237,9 +238,9 @@ class backtest(object):
         base_value = pd.Series(self.initial_money * self.trade_ratio, index = [base_time])
         # 拼接在一起
         self.account_value = pd.concat([base_value, self.account_value])
-        # 拼接benchmark价值序列，初始值则用回测开始当天的开盘价
-        benchmark_base_value = pd.Series(self.bkt_data.benchmark_price.ix['OpenPrice', 0, 0], 
-                                         index = [base_time])
+        # 拼接benchmark价值序列，本来第一项应当是回测开始那天的指数开盘价, 但是由于全收益指数没有开盘价,
+        # 因此只能用第一天的收盘价替代, 即第一天基准指数的收益率一定是0
+        benchmark_base_value = pd.Series(self.benchmark_value.iloc[0], index = [base_time])
         self.benchmark_value = pd.concat([benchmark_base_value, self.benchmark_value])
 
         # 计算每天的持股数
@@ -411,7 +412,7 @@ class backtest(object):
         # 画图
         self.bkt_performance.plot_performance(foldername=foldername, pdfs=pdfs)
 
-    # 利用回测得到的数据，或直接算出的数据进行业绩归因
+    # 利用回测得到的数据，或理想世界简单回测的数据进行业绩归因
     # is_real_world为是否对回测出的模拟真实数据进行归因，real_world_type为0，为使用回测的策略对数收益率
     # 为1，为使用策略的超额对数收益率（即对基准进行每日再平衡）， 为2，为使用策略超额净值计算出的超额收益率（即对基准进行调仓日再平衡）
     # 如果不使用模拟的真实数据进行归因，则使用日收益数据直接计算组合收益率，这种情况下，如进行超额归因，则是对基准进行每日再平衡
@@ -420,21 +421,28 @@ class backtest(object):
                                     foldername='', pdfs='default'):
         if is_real_world:
             if real_world_type == 0:
-                self.bkt_pa = performance_attribution(self.real_pct_position, benchmark_weight=benchmark_weight,
-                                                      portfolio_returns=self.bkt_performance.log_return)
+                self.bkt_pa = performance_attribution(self.real_pct_position, self.bkt_performance.log_return,
+                                                      benchmark_weight=benchmark_weight)
             elif real_world_type == 1:
                 assert type(benchmark_weight) != str, 'No benchmark weight passed while executing pa on excess return!'
-                self.bkt_pa = performance_attribution(self.real_pct_position, benchmark_weight=benchmark_weight,
-                                                      portfolio_returns=self.bkt_performance.excess_return)
+                self.bkt_pa = performance_attribution(self.real_pct_position, self.bkt_performance.excess_return,
+                                                      benchmark_weight=benchmark_weight)
             elif real_world_type == 2:
                 assert type(benchmark_weight) != str, 'No benchmark weight passed while executing pa on excess return!'
-                nv_return = np.log(self.bkt_performance.excess_net_account_value/
-                                   self.bkt_performance.excess_net_account_value.shift(1))
-                self.bkt_pa = performance_attribution(self.real_pct_position, benchmark_weight=benchmark_weight,
-                                                      portfolio_returns=nv_return)
+                self.bkt_pa = performance_attribution(self.real_pct_position, self.bkt_performance.excess_nv_return,
+                                                      benchmark_weight=benchmark_weight)
         else:
-            self.bkt_pa = performance_attribution(self.real_pct_position, benchmark_weight=benchmark_weight,
-                                                  )
+            # 理想世界的简单回测, 先计算理想世界下的组合收益序列
+            ideal_port_return = backtest.ideal_world_backtest(self.tar_pct_position.holding_matrix,
+                                                              trading_cost=0)
+            # 判断是否进行超额归因, 如果是超额归因, 还需要减去基准指数的收益
+            if type(benchmark_weight) != str:
+                # 注意理想世界简单回测的超额收益, 就直接用两者收益相减了, 这意味着超额收益是基于每日再平衡的
+                ideal_return = ideal_port_return - self.bkt_performance.log_return_bench
+            else:
+                ideal_return = ideal_port_return * 1
+            self.bkt_pa = performance_attribution(self.real_pct_position, ideal_return,
+                                                  benchmark_weight=benchmark_weight)
         self.bkt_pa.execute_performance_attribution(outside_bb=outside_bb, discard_factor=discard_factor,
                                                     show_warning=show_warning, foldername=foldername)
         self.bkt_pa.plot_performance_attribution(foldername=foldername, pdfs=pdfs)
@@ -446,8 +454,7 @@ class backtest(object):
                               index=self.real_vol_position.holding_matrix.index)
         self.cash.ix[0] = self.initial_money * self.trade_ratio
         self.account_value = []
-        self.benchmark_value = self.bkt_data.benchmark_price.ix['ClosePrice', :, 0]
-
+        self.benchmark_value = self.bkt_data.benchmark_price.ix['ClosePrice_adj', :, 0]
 
     # 重置传入的持仓矩阵参数的函数，当要测试同一个策略的不同参数对其的影响时，会用到，这样可以不必重新创建一个回测对象
     # 注意这里只改变了传入的持仓矩阵，包括回测时间，股票id，benchmark等其余参数一律不变
@@ -466,7 +473,7 @@ class backtest(object):
 
     # 重置benchmark，需要观察一个策略相对不同benchmark的变化时用到，包括改变股票池后，benchmark应当换成对应的股票池
     def reset_bkt_benchmark(self, new_bkt_benchmark_data):
-        self.bkt_data.benchmark_price = data.read_data(new_bkt_benchmark_data, ['ClosePrice','OpenPrice'])
+        self.bkt_data.benchmark_price = data.read_data(new_bkt_benchmark_data, ['ClosePrice_adj'])
 
         # 将benchmark price数据期调整为回测期
         self.bkt_data.benchmark_price = data.align_index(self.tar_pct_position.holding_matrix,
@@ -535,7 +542,9 @@ class backtest(object):
     # 此函数为进行理想情况下的简单回测, 即直接用持仓乘以收盘价得到组合的净值和收益序列
     # 此回测方法可以用来对策略本身进行研究, 因为现实交易中遇到的问题大部分不是一个策略可控的, 与策略无关
     # 二来, 此回测方法可以用来与真实模拟的回测做对比, 以观察理想交易和现实交易情况下的差异及区别
-    # 注意, 此处所有的价值都是用收盘价来评估的, 调仓价格也是调仓当天的收盘价(而不是现实回测的开盘价)
+    # 注意1, 此处所有的价值都是用收盘价来评估的, 调仓价格也是调仓当天的收盘价(而不是现实回测的开盘价)
+    # 注意2, 此回测一样不支持做空, 因此也不能对超额持仓进行回测, 因此对超额持仓进行理想归因时
+    # 仍需用此函数算组合的收益, 减去基准收益, 得到超额收益
     @staticmethod
     def ideal_world_backtest(tar_holding_matrix, *, trading_cost=0):
         # 读取收盘价数据
@@ -553,10 +562,10 @@ class backtest(object):
             # 组合每期的价值变化要减去调仓的手续费
             port_value_change = port_value_change - change_cost
 
-        # 组合每期的价值, 及假设前一期是1, 这一期的价值, 为组合每期的价值变化加1
-        port_value = port_value_change + 1
+        # 组合的累计价值
+        port_cum_value = (port_value_change + 1).cumprod()
         # 于是组合的对数收益率也就可以计算了
-        port_return = np.log(port_value/port_value.shift(1))
+        port_return = np.log(port_cum_value/port_cum_value.shift(1))
 
         return port_return
 

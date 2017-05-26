@@ -66,7 +66,7 @@ class strategy_data(data):
 
     # 对数据进行winsorization
     @staticmethod
-    def winsorization(raw_data, *, percentile = 0.03):
+    def winsorization(raw_data, *, percentile = 0.01):
         """ Winsorize the data.
         
         raw_data (pd.DataFrame): data you'd like to winsorize
@@ -124,7 +124,7 @@ class strategy_data(data):
 
     # 计算因子暴露，简单加权
     @staticmethod
-    def get_exposure(factor, *, percentile = 0.03, compress = True, limit = 3.5):
+    def get_exposure(factor, *, percentile = 0.01, compress = True, limit = 3.5):
         temp_data = strategy_data.winsorization(factor, percentile = percentile)
         # 如有需要，对尾部数据进行压缩
         if compress:
@@ -138,7 +138,7 @@ class strategy_data(data):
     
     # 计算市值加权的因子暴露
     @staticmethod
-    def get_cap_wgt_exposure(factor, mv, *, percentile = 0.03, compress = True, limit = 3.5):
+    def get_cap_wgt_exposure(factor, mv, *, percentile = 0.01, compress = True, limit = 3.5):
         temp_data = strategy_data.winsorization(factor, percentile = percentile)
         # 如有需要，对尾部数据进行压缩
         if compress:

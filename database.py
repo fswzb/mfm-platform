@@ -359,13 +359,15 @@ class database(object):
                                                                            method='ffill').replace(np.inf, np.nan)
         self.data.raw_data['NetIncome_ttm_growth_8q'] = ni_ttm_growth_8q
         self.data.raw_data['Revenue_ttm_growth_8q'] = revenue_ttm_growth_8q
+
         self.data.raw_data['EPS_ttm_growth_8q'] = eps_ttm_growth_8q
 
     # 取指数行情数据
     def get_index_price(self):
         sql_query = "select b.TradingDay, a.SecuCode, b.ClosePrice, b.OpenPrice from "\
                     "(select distinct InnerCode, SecuCode from SecuMain "\
-                    "where SecuCode in ('000001','000016','000300','000905','000906') and SecuCategory=4) a "\
+                    "where SecuCode in ('000001','000016','000300','000905','000906','H00016','H00300'," \
+                    "'H00905','H00906') and SecuCategory=4) a "\
                     "left join (select InnerCode, TradingDay, ClosePrice, OpenPrice from QT_IndexQuote "\
                     "where TradingDay>='" + str(self.trading_days.iloc[0]) + "' and TradingDay<='" + \
                     str(self.trading_days.iloc[-1]) + "') b "\
@@ -377,9 +379,14 @@ class database(object):
         index_open_price = index_open_price.reindex(self.data.stock_price.major_axis)
         # 鉴于指数行情的特殊性，将指数行情都存在benchmark price中的每个item的第一列
         index_name = {'000001':'szzz', '000016':'sz50', '000300':'hs300', '000905':'zz500', '000906':'zz800'}
-        for column in index_close_price:
-            self.data.benchmark_price.ix['ClosePrice_'+index_name[column], :, 0] = index_close_price[column].values
-            self.data.benchmark_price.ix['OpenPrice_'+index_name[column], :, 0] = index_open_price[column].values
+        for key in index_name:
+            self.data.benchmark_price.ix['ClosePrice_'+index_name[key], :, 0] = index_close_price[key].values
+            self.data.benchmark_price.ix['OpenPrice_'+index_name[key], :, 0] = index_open_price[key].values
+        # 全收益指数只有收盘价, 而且没有上证综指的全收益
+        index_adj_name = {'H00016':'adj_sz50', 'H00300':'adj_hs300', 'H00905':'adj_zz500', 'H00906':'adj_zz800'}
+        for key in index_adj_name:
+            self.data.benchmark_price.ix['ClosePrice_'+index_adj_name[key], :, 0] = index_close_price[key].values
+        pass
 
     # 取指数权重数据
     def get_index_weight(self, *, first_date=pd.Timestamp('1900-01-01')):
@@ -513,8 +520,10 @@ class database(object):
                               'PE_ttm', 'NetIncome_ttm_growth_8q', 'Revenue_ttm_growth_8q', 'EPS_ttm_growth_8q']
         if_tradable_name_list = ['is_suspended', 'is_enlisted', 'is_delisted']
         benchmark_index_name = ['szzz', 'sz50', 'hs300', 'zz500', 'zz800']
-        benchmark_data_type = ['ClosePrice', 'OpenPrice', 'Weight']
+        benchmark_data_type = ['ClosePrice', 'OpenPrice', 'Weight', 'ClosePrice_adj']
         benchmark_price_name_list = [a+'_'+b for a in benchmark_data_type for b in benchmark_index_name]
+        # 注意上证综指没有closeprice adj, 即全收益数据
+        benchmark_price_name_list = benchmark_price_name_list.remove('ClosePrice_adj_szzz')
 
         old_stock_price = data.read_data(stock_price_name_list, stock_price_name_list)
         old_raw_data = data.read_data(raw_data_name_list, raw_data_name_list)
@@ -570,11 +579,17 @@ class database(object):
 if __name__ == '__main__':
     import time
     start_time = time.time()
-    db = database(start_date='2007-01-01', end_date='2017-03-31')
+    db = database(start_date='2007-01-01', end_date='2017-04-27')
     # db.get_data_from_db()
     # db.update_data_from_db(end_date='2017-04-27')
     db.initialize_jydb()
+    db.initialize_sq()
+    db.initialize_gg()
     db.get_trading_days()
+    db.get_labels()
+    db.get_ClosePrice_adj()
+    db.get_index_price()
+    data.write_data(db.data.benchmark_price)
     print("time: {0} seconds\n".format(time.time()-start_time))
 
 

@@ -783,7 +783,7 @@ class single_factor_strategy(strategy):
             bkt_obj.reset_bkt_position(self.position)
         # 将回测的基准改为当前的股票池，若为all，则用默认的基准值
         if stock_pool != 'all':
-            bkt_obj.reset_bkt_benchmark(['ClosePrice_' + stock_pool, 'OpenPrice_' + stock_pool])
+            bkt_obj.reset_bkt_benchmark(['ClosePrice_adj_' + stock_pool])
 
         # 回测、画图、归因
         bkt_obj.execute_backtest()
@@ -804,8 +804,8 @@ class single_factor_strategy(strategy):
             # 注意bb obj进行了一份深拷贝，这是因为在业绩归因的计算中，会根据不同的股票池丢弃数据，导致数据不全，因此不能传引用
             bkt_obj.get_performance_attribution(outside_bb=bb_obj, benchmark_weight=pa_benchmark_weight,
                                                 discard_factor=discard_factor, show_warning=False,
-                                                foldername=stock_pool, pdfs=self.pdfs, is_real_world=False,
-                                                real_world_type=2)
+                                                foldername=stock_pool, pdfs=self.pdfs, is_real_world=True,
+                                                real_world_type=1)
 
         # 画单因子组合收益率
         self.get_factor_return(weights=np.sqrt(self.strategy_data.stock_price.ix['FreeMarketValue']),

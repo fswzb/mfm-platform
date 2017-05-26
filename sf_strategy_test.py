@@ -176,15 +176,15 @@ ac = analyst_coverage()
 ac.get_abn_coverage()
 abn_coverage = ac.strategy_data.factor.ix['abn_coverage']
 
-sf_test_multiple_pools(factor=abn_coverage, direction='+', bkt_start=pd.Timestamp('2009-04-01'), holding_freq='m',
-                       bkt_end=pd.Timestamp('2017-03-30'), stock_pools=['hs300'],
-                       do_bb_pure_factor=False, do_pa=True, select_method=0, do_active_pa=False,
-                       do_data_description=False)
+# sf_test_multiple_pools(factor=abn_coverage, direction='+', bkt_start=pd.Timestamp('2009-04-01'), holding_freq='m',
+#                        bkt_end=pd.Timestamp('2017-03-30'), stock_pools=['hs300'],
+#                        do_bb_pure_factor=False, do_pa=True, select_method=0, do_active_pa=True,
+#                        do_data_description=False)
 
-# sf_test_multiple_pools_parallel(factor=abn_coverage, direction='+', bkt_start=pd.Timestamp('2009-04-01'), holding_freq='m',
-#                                 bkt_end=pd.Timestamp('2017-04-26'), stock_pools=['all','hs300','zz500','zz800'],
-#                                 do_bb_pure_factor=False, do_pa=True, select_method=0, do_active_pa=True,
-#                                 do_data_description=False)
+sf_test_multiple_pools_parallel(factor=abn_coverage, direction='+', bkt_start=pd.Timestamp('2009-04-01'), holding_freq='m',
+                                bkt_end=pd.Timestamp('2017-04-26'), stock_pools=['all','hs300','zz500','zz800'],
+                                do_bb_pure_factor=False, do_pa=False, select_method=0, do_active_pa=True,
+                                do_data_description=True)
 
 
 

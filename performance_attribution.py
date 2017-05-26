@@ -27,26 +27,24 @@ class performance_attribution(object):
     foo
     """
 
-    def __init__(self, input_position, *, benchmark_weight='default', portfolio_returns='default'):
+    def __init__(self, input_position, portfolio_returns, *, benchmark_weight='default'):
         self.pa_position = position(input_position.holding_matrix)
         # 如果传入基准持仓数据，则归因超额收益
-        self.is_benchmark = False
         if type(benchmark_weight) != str:
             # 一些情况下benchmark的权重和不为1（一般为差一点），为了防止偏差，这里重新归一化
             # 同时将时间索引控制在回测期间内
             new_benchmark_weight = benchmark_weight.reindex(self.pa_position.holding_matrix.index).\
                 apply(lambda x:x if (x==0).all() else x.div(x.sum()), axis=1)
             self.pa_position.holding_matrix = input_position.holding_matrix.sub(new_benchmark_weight, fill_value=0)
-            self.is_benchmark = True
+            # 提示用户, 归因变成了对超额部分的归因
+            print('Note that with benchmark_weight being passed, the performance attribution will be base on the '
+                  'active part of the portfolio against the benchmark. Please make sure that the portfolio returns '
+                  'you passed to the pa is the corresponding active return! \n')
         elif benchmark_weight == 'default':
             self.pa_position.holding_matrix = input_position.holding_matrix
 
         # 如果有传入组合收益，则直接用这个组合收益，如果没有则自己计算
-        self.port_returns = pd.DataFrame()
-        self.is_port_ret_imported = False
-        if type(portfolio_returns) != str:
-            self.port_returns = portfolio_returns
-            self.is_port_ret_imported = True
+        self.port_returns = portfolio_returns
 
         self.pa_returns = pd.DataFrame()
         self.port_expo = pd.DataFrame()
@@ -109,17 +107,15 @@ class performance_attribution(object):
         self.port_pa_returns = self.port_pa_returns.reindex(self.pa_position.holding_matrix.index)
 
         # 计算各类因子的总收益情况
+        # 注意, 由于计算组合收益的时候, 组合暴露要用上一期的暴露, 因此第一期统一没有因子收益
+        # 这一部分收益会被归到residual return中去, 从而提升residual return
+        # 而fillna是为了确保这部分收益会到residual中去, 否则residual会变成nan, 从而丢失这部分收益
         # 风格因子收益
         self.style_factor_returns = self.port_pa_returns.ix[:, 0:10].sum(1)
         # 行业因子收益
         self.industry_factor_returns = self.port_pa_returns.ix[:, 10:38].sum(1)
         # 国家因子收益
-        self.country_factor_return = self.port_pa_returns.ix[:, 38]
-
-        # 如果需要，则直接根据股票收益算出组合的收益
-        if not self.is_port_ret_imported:
-            from backtest import backtest
-            self.port_returns = backtest.ideal_world_backtest(self.pa_position.holding_matrix)
+        self.country_factor_return = self.port_pa_returns.ix[:, 38].fillna(0.0)
 
         # 残余收益，即alpha收益，为组合收益减去之前那些因子的收益
         # 注意下面会提到，缺失数据会使得残余收益变大

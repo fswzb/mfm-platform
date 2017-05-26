@@ -336,6 +336,11 @@ class analyst_coverage(single_factor_strategy):
         self.strategy_data.handle_stock_pool(shift=True)
         self.strategy_data.discard_uninv_data()
 
+        # 计算暴露
+        for item in ['lncap', 'turnover', 'momentum']:
+            self.strategy_data.stock_price.ix[item] = strategy_data.get_exposure(
+                self.strategy_data.stock_price.ix[item])
+
         # 生成调仓日
         self.generate_holding_days(holding_freq='m', start_date='2007-01-01')
 
@@ -362,6 +367,8 @@ class analyst_coverage(single_factor_strategy):
         abn_coverage = abn_coverage.reindex(self.strategy_data.stock_price.major_axis, method='ffill')
         self.strategy_data.factor = pd.Panel({'abn_coverage':abn_coverage}, major_axis=
                     self.strategy_data.stock_price.major_axis, minor_axis=self.strategy_data.stock_price.minor_axis)
+        self.strategy_data.stock_price.ix['abn_coverage'] = strategy_data.get_exposure(abn_coverage,
+                                                                           percentile=0, compress=False)
 
     # 定义进行fama-macbeth回归的函数, 因为论文中用到了大量的fm回归
     @staticmethod
@@ -422,6 +429,11 @@ class analyst_coverage(single_factor_strategy):
         self.strategy_data.handle_stock_pool(shift=True)
         self.strategy_data.discard_uninv_data()
 
+        # 计算暴露
+        for item in ['lncap', 'turnover', 'momentum']:
+            self.strategy_data.stock_price.ix[item] = strategy_data.get_exposure(
+                self.strategy_data.stock_price.ix[item])
+
         # 建立储存数据的dataframe
         abn_coverage = self.strategy_data.raw_data.ix['ln_coverage', self.holding_days, :] * np.nan
         self.reg_stats = pd.Panel(np.nan, items=['coef', 't_stats', 'rsquare'],
@@ -443,7 +455,9 @@ class analyst_coverage(single_factor_strategy):
             self.reg_stats.ix['rsquare', time, 1] = results.rsquared_adj
 
         abn_coverage = abn_coverage.reindex(self.strategy_data.stock_price.major_axis, method='ffill')
-        self.strategy_data.stock_price['abn_coverage'] = abn_coverage
+        # 再次对abn coverage计算暴露, 但是不再winsorize
+        self.strategy_data.stock_price['abn_coverage'] = strategy_data.get_exposure(abn_coverage,
+                                                                                    percentile=0, compress=False)
 
         # 应当根据月份,对数据进行fm回归
         y_fm = self.strategy_data.raw_data.ix['ln_coverage', self.holding_days, :]
@@ -455,16 +469,6 @@ class analyst_coverage(single_factor_strategy):
         self.table1a.ix[0, 'r_square'] = r2
         self.table1a.ix[1, 'r_square'] = r2_adj
 
-        # # 对回归得到的系数取平均值
-        # self.table1a = self.reg_stats.replace(np.inf, np.nan).replace(-np.inf, np.nan).mean(axis=1)
-        # # 画表
-        # fig, ax = plt.subplots(figsize=(12, 6))
-        # ax.xaxis.set_visible(False)
-        # ax.yaxis.set_visible(False)
-        # ax.set_frame_on(False)
-        # table(ax, self.table1a, loc='best')
-        # plt.savefig(str(os.path.abspath('.')) + '/' + self.strategy_data.stock_pool +
-        #             '/' + 'Table1a.png', dpi=1200)
         # 用csv储存结果
         self.table1a.to_csv(str(os.path.abspath('.')) + '/' + self.strategy_data.stock_pool +
                      '/' + 'Table1a.csv', na_rep='N/A', encoding='GB18030')
@@ -505,6 +509,11 @@ class analyst_coverage(single_factor_strategy):
 
         # 过滤数据
         self.strategy_data.discard_uninv_data()
+
+        # 计算因子暴露
+        for item in ['vlty', 'lbm', 'roa']:
+            self.strategy_data.stock_price.ix[item] = strategy_data.get_exposure(
+                self.strategy_data.stock_price.ix[item])
 
         base = pd.concat([self.strategy_data.raw_data.ix['coverage'], self.strategy_data.stock_price.ix['abn_coverage'],
                           self.strategy_data.stock_price.ix[['lncap', 'turnover', 'momentum', 'vlty',
@@ -726,8 +735,9 @@ class analyst_coverage(single_factor_strategy):
         self.monthly_return = self.strategy_data.stock_price.ix['daily_return'].groupby(term_label).sum()
         # 因为是用之后的收益来回归,因此相当于预测了收益
         monthly_return = self.monthly_return.shift(-1)
-        # 选取解释变量,将base中丢掉abn coverage即可
-        raw_x_data = self.base.drop('abn_coverage')
+        ## 选取解释变量,将base中丢掉abn coverage即可
+        # 用其他回归后, 用coverage不如用abn coverage, 因此丢弃coverage
+        raw_x_data = self.base.drop('coverage')
         # 计算暴露
         y_data = pd.DataFrame(monthly_return.values, index=self.holding_days, columns=monthly_return.columns)
         x_data = raw_x_data * np.nan
