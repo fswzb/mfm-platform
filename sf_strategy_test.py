@@ -31,18 +31,21 @@ def sf_test_multiple_pools(factor='default', *, direction='+', bb_obj='Empty', d
                            stock_pools=['all', 'hs300', 'zz500', 'zz800'], bkt_start='default', bkt_end='default',
                            select_method=0, do_bb_pure_factor=False, do_active_bb_pure_factor=False,
                            do_pa=False, do_active_pa=False, do_data_description=False):
-    # 如果传入的是str，则读取同名文件，如果是dataframe，则直接传入因子
+    # 如果传入的是str，则将其传入到single factor test中去让其自己处理，如果是dataframe，则直接传入因子
     # 注意：这里的因子数据并不储存到self.strategy_data.factor中，因为循环股票池会丢失数据
-    # 这里实际上是希望每次循环都有一个新的single factor strategy对象，
-    # 而这个函数的目的则是每次循环不用再重新建立这个对象
-    if type(factor) == str:
+    if type(factor) != str:
         factor_data = data.read_data([factor], [factor], shift=True)
         factor = factor_data[factor]
+        # 初始化一个持仓对象，以用来初始化backtest对象，索引以factor为标准
+        temp_position = position(factor)
+    else:
+        # 如过传入的是string, 则读取closeprice_adj来初始化backtest对象
+        cp_adj = data.read_data(['ClosePrice_adj'])
+        cp_adj = cp_adj['ClosePrice_adj']
+        temp_position = position(cp_adj)
 
-    # 初始化一个持仓对象，以用来初始化backtest对象，索引以factor为标准
-    temp_position = position(factor)
     # 先要初始化bkt对象
-    bkt_obj = backtest(temp_position, bkt_start=bkt_start, bkt_end=bkt_end, buy_cost=0, sell_cost=0)
+    bkt_obj = backtest(temp_position, bkt_start=bkt_start, bkt_end=bkt_end, buy_cost=1.5/1000, sell_cost=1.5/1000)
     # 建立bb对象，否则之后每次循环都要建立一次新的bb对象
     if bb_obj == 'Empty':
         bb_obj = barra_base()
@@ -79,16 +82,19 @@ def sf_test_multiple_pools_parallel(factor='default', *, direction='+', bb_obj='
                                     do_active_pa=False, holding_freq='m', do_data_description=False):
     # 如果传入的是str，则读取同名文件，如果是dataframe，则直接传入因子
     # 注意：这里的因子数据并不储存到self.strategy_data.factor中，因为循环股票池会丢失数据
-    # 这里实际上是希望每次循环都有一个新的single factor strategy对象，
-    # 而这个函数的目的则是每次循环不用再重新建立这个对象
-    if type(factor) == str:
+    if type(factor) != str:
         factor_data = data.read_data([factor], [factor], shift=True)
         factor = factor_data[factor]
+        # 初始化一个持仓对象，以用来初始化backtest对象，索引以factor为标准
+        temp_position = position(factor)
+    else:
+        # 如过传入的是string, 则读取closeprice_adj来初始化backtest对象
+        cp_adj = data.read_data(['ClosePrice_adj'])
+        cp_adj = cp_adj['ClosePrice_adj']
+        temp_position = position(cp_adj)
 
-    # 初始化一个持仓对象，以用来初始化backtest对象，索引以factor为标准
-    temp_position = position(factor)
     # 先要初始化bkt对象
-    bkt_obj = backtest(temp_position, bkt_start=bkt_start, bkt_end=bkt_end, buy_cost=0, sell_cost=0)
+    bkt_obj = backtest(temp_position, bkt_start=bkt_start, bkt_end=bkt_end, buy_cost=1.5/1000, sell_cost=1.5/1000)
     # 建立bb对象，否则之后每次循环都要建立一次新的bb对象
     if bb_obj == 'Empty':
         bb_obj = barra_base()
@@ -171,20 +177,20 @@ def sf_test_multiple_pools_parallel(factor='default', *, direction='+', bb_obj='
 # coverage = coverage.shift(1)
 #
 # 论文里的abnormal coverage
-from analyst_coverage import analyst_coverage
-ac = analyst_coverage()
-ac.get_abn_coverage_poisson()
-abn_coverage = ac.strategy_data.factor.ix['abn_coverage']
+# from analyst_coverage import analyst_coverage
+# ac = analyst_coverage()
+# ac.get_abn_coverage_poisson()
+# abn_coverage = ac.strategy_data.factor.ix['abn_coverage']
 
-# sf_test_multiple_pools(factor=abn_coverage, direction='+', bkt_start=pd.Timestamp('2009-04-01'), holding_freq='m',
-#                        bkt_end=pd.Timestamp('2017-03-30'), stock_pools=['hs300'],
-#                        do_bb_pure_factor=False, do_pa=True, select_method=0, do_active_pa=True,
-#                        do_data_description=False)
+sf_test_multiple_pools(factor='default', direction='+', bkt_start=pd.Timestamp('2009-04-01'), holding_freq='w',
+                       bkt_end=pd.Timestamp('2017-03-30'), stock_pools=['zz500'],
+                       do_bb_pure_factor=False, do_pa=True, select_method=3, do_active_pa=True,
+                       do_data_description=False)
 
-sf_test_multiple_pools_parallel(factor=abn_coverage, direction='+', bkt_start=pd.Timestamp('2009-04-01'), holding_freq='m',
-                                bkt_end=pd.Timestamp('2017-04-26'), stock_pools=['all','hs300','zz500','zz800'],
-                                do_bb_pure_factor=False, do_pa=False, select_method=0, do_active_pa=True,
-                                do_data_description=True)
+# sf_test_multiple_pools_parallel(factor='default', direction='+', bkt_start=pd.Timestamp('2009-04-01'),
+#                                 bkt_end=pd.Timestamp('2017-04-26'), stock_pools=['hs300','zz500','zz800'],
+#                                 do_bb_pure_factor=False, do_pa=True, select_method=3, do_active_pa=True,
+#                                 do_data_description=False, holding_freq='w')
 
 
 

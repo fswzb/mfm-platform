@@ -55,8 +55,8 @@ class strategy(object):
     def generate_holding_days(self):
         self.holding_days = pd.read_csv(str(os.path.abspath('.'))+'/holding_days.csv', 
                                         parse_dates = [0], squeeze = True)
-        print('Please note that, as the default method,' \
-        'the holding days has been read from the holding_days.csv file in current directory\n')
+        print('Please note that, as the default method, '
+              'the holding days has been read from the holding_days.csv file in current directory\n')
         
     # 在持仓矩阵中过滤掉那些不能交易的股票
     def filter_untradable(self):
@@ -73,12 +73,17 @@ class strategy(object):
     # 根据一个传入的时间序列数据，根据频率生成调仓周期的函数
     # 传入的时间序列可以是series，也可以是dataframe
     @staticmethod
-    def resample_tradingdays(time_series, *, freq='m'):
+    def resample_tradingdays(time_series, *, freq='m', loc=0):
         # 所取调仓日为每个调仓周期的第一天,注意调仓时间是调仓日的早上,即调仓日当天早上调仓时,拥有上一个周期的所有数据
-        resampled_tds = time_series.resample(freq).apply(lambda x:x.index[0] if x.size>0 else np.nan).dropna()
+        resampled_tds = time_series.resample(freq).apply(lambda x:x.index[loc] if x.size>np.abs(loc) else np.nan).dropna()
         # 将resampled_tds改为一个索引和值都是做好的交易日的series
         resampled_tds = pd.Series(resampled_tds.values, index=resampled_tds.values)
         return resampled_tds
+
+    # 根据策略, 在类的内部自己构造因子的函数, 即不从外部读取因子, 而是内部构造
+    # 根据不同的策略构造不同的因子, 因此这里的函数什么也不做
+    def construct_factor(self):
+        pass
 
 
 

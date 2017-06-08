@@ -73,17 +73,28 @@ class performance_attribution(object):
     # 用discard_factor可以定制用来归因的因子，将不需要的因子的名字或序号以list写入即可
     # 注意，只能用来删除风格因子，不能用来删除行业因子或country factor
     def get_pa_return(self, *, discard_factor=[]):
-        # 将被删除的风格因子的暴露全部设置为0
-        self.bb.bb_data.factor_expo.ix[discard_factor, :, :] = 0
-        # 再次将不能交易的值设置为nan
-        self.bb.bb_data.discard_uninv_data()
-        # 建立储存因子收益的dataframe
-        self.pa_returns = pd.DataFrame(0, index=self.bb.bb_data.factor_expo.major_axis, 
-                                       columns = self.bb.bb_data.factor_expo.items)
-        # 计算barra base因子的因子收益
-        self.bb.get_bb_factor_return()
-        # barra base因子的因子收益即是归因的因子收益
-        self.pa_returns = self.bb.bb_factor_return
+        # 如果有储存的因子收益, 且没有被丢弃的因子, 则读取储存在本地的因子
+        if os.path.isfile('bb_factor_return_'+self.bb.bb_data.stock_pool+'.csv') and len(discard_factor) == 0:
+            bb_factor_return = data.read_data(['bb_factor_return_'+self.bb.bb_data.stock_pool], ['pa_returns'])
+            self.pa_returns = bb_factor_return['pa_returns']
+            print('Barra base factor returns successfully read from local files! \n')
+        else:
+            # 将被删除的风格因子的暴露全部设置为0
+            self.bb.bb_data.factor_expo.ix[discard_factor, :, :] = 0
+            # 再次将不能交易的值设置为nan
+            self.bb.bb_data.discard_uninv_data()
+            # 建立储存因子收益的dataframe
+            self.pa_returns = pd.DataFrame(0, index=self.bb.bb_data.factor_expo.major_axis,
+                                           columns = self.bb.bb_data.factor_expo.items)
+            # 计算barra base因子的因子收益
+            self.bb.get_bb_factor_return()
+            # barra base因子的因子收益即是归因的因子收益
+            self.pa_returns = self.bb.bb_factor_return
+
+            # 将回归得到的因子收益储存在本地, 每次更新了新的数据都要重新回归后储存一次
+            # self.pa_returns.to_csv('bb_factor_return_'+self.bb.bb_data.stock_pool+'.csv',
+            #                        index_label='datetime', na_rep='NaN', encoding='GB18030')
+
         # 将pa_returns的时间轴改为业绩归因的时间轴（而不是bb的时间轴）
         self.pa_returns = self.pa_returns.reindex(self.pa_position.holding_matrix.index)
 

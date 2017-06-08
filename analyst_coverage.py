@@ -20,6 +20,7 @@ from matplotlib.backends.backend_pdf import PdfPages
 from cvxopt import solvers, matrix
 from pandas.tools.plotting import table
 from pandas.stats.fama_macbeth import fama_macbeth
+from statsmodels.discrete.discrete_model import Poisson
 
 from single_factor_strategy import single_factor_strategy
 from database import database
@@ -67,6 +68,48 @@ class analyst_coverage(single_factor_strategy):
         # 将其储存到raw_data中，顺便将stock code重索引为标准的stock code
         self.strategy_data.raw_data = pd.Panel({'coverage':rolling_coverage}, major_axis=
             self.strategy_data.stock_price.major_axis, minor_axis=self.strategy_data.stock_price.minor_axis)
+
+    # 取每支股票的每期报表的第一次发布的数据, 以用来选择分析师数据的rolling window
+    def get_fra_pub_date(self):
+        self.db.initialize_jydb()
+        self.db.initialize_sq()
+        self.db.initialize_gg()
+        self.db.get_trading_days()
+        self.db.get_labels()
+
+        sql_query = 'select b.InfoPublDate, b.EndDate, a.SecuCode from (' \
+                    'select distinct CompanyCode, SecuCode from SmartQuant.dbo.ReturnDaily) a ' \
+                    'left join (select InfoPublDate, EndDate, CompanyCode from LC_BalanceSheetAll ' \
+                    'where IfMerged=1 and IfAdjusted=2 and IfComplete!=3) b on a.CompanyCode=b.CompanyCode ' \
+                    'order by SecuCode, InfoPublDate, EndDate'
+        fra_pub_date = self.db.jydb_engine.get_original_data(sql_query)
+        # 有一些重复出现的报告数据, 要把这些数据删除掉, 这些数据信息都是一样的, 并未调整, 但是在不同的年份重复出现
+        fra_pub_date = fra_pub_date.drop_duplicates(subset=['SecuCode', 'EndDate'], keep='first')
+
+        self.fra_pub_date = fra_pub_date
+        pass
+
+
+    # 寻找起始时间的函数
+    @staticmethod
+    def get_start_time(s, *, end_time, fra_interval=2):
+        # 在给定日期之前的所有财报发布日
+        past_dates = s[s <= end_time]
+        # 开始日为给定日期前2个财报发布的时间段, 可以更改2这个数字
+        if past_dates.shape[0] >= fra_interval:
+            start_time = past_dates.iloc[-fra_interval]
+        else:
+            start_time = pd.Timestamp('1990-01-01')
+
+        # 如果前两个财报和当前时间间隔过短(一般是因为一季度报表和年度报表时间太近, 有时还在同一天)
+        # 如果短于60天, 则寻找前3个财报的时间段
+        if (end_time-start_time).days < 60:
+            if past_dates.shape[0] >= fra_interval+1:
+                start_time = past_dates.iloc[-(fra_interval+1)]
+            else:
+                start_time = pd.Timestamp('1990-01-01')
+
+        return start_time
 
     # 定义在grouped数据(对同一股票的过去一段时间的分析师预测数据)里, 取最近一次预测的最近一个财年的预测值的函数
     @staticmethod
@@ -165,30 +208,45 @@ class analyst_coverage(single_factor_strategy):
         # coverage_disp = coverage * np.nan
         # coverage_ep = coverage * np.nan
 
+        # # 所有数据的透视表
+        # original_table = original_data.pivot_table(index='create_date', columns='code',
+        #         values=['forecast_profit', 'organ_id', 'author', 'Time_year'])
+        # original_table = original_table.T.to_panel().transpose(1, 0, 2)
+
         # 根据得到的时间索引进行循环
         for cursor, time in enumerate(date_mark.index):
             # 取最近的90天
             end_time = time
-            start_time = end_time - pd.DateOffset(days=rolling_days-1)
-            # 满足最近90天条件的项
-            condition = np.logical_and(original_data['create_date'] >= start_time,
-                                       original_data['create_date'] <= end_time)
-            recent_data = original_data[condition]
-            # 对股票分组
-            grouped = recent_data.groupby('code')
+            # start_time = end_time - pd.DateOffset(days=rolling_days-1)
+            # # 满足最近90天条件的项
+            # condition = np.logical_and(original_data['create_date'] >= start_time,
+            #                            original_data['create_date'] <= end_time)
+            # recent_data = original_data[condition]
+
+            # # 对股票分组
+            # grouped = recent_data.groupby('code')
             # 分组汇总, 若机构id,作者,预测年份都一样,则删除重复的项,然后再汇总一共有多少预测ni的报告(ni值非nan)
             # curr_coverage = grouped.apply(lambda x:x.drop_duplicates(subset=['organ_id', 'author',
             #                               'Time_year'])['forecast_profit'].count())
 
-
-            if cursor>=100:
-                pass
-            curr_coverage = grouped.apply(analyst_coverage.simple_count)
+            # curr_coverage = grouped.apply(analyst_coverage.simple_count)
             # coverage_std = grouped.apply(analyst_coverage.ni_std)
             # coverage_mean = grouped.apply(analyst_coverage.ni_mean)
 
-            # 储存此数据
-            coverage.ix[time, :] = curr_coverage
+            start_time = self.fra_pub_date.groupby('SecuCode')['InfoPublDate'].apply(
+                analyst_coverage.get_start_time, end_time=end_time)
+            # 循环股票
+            for stock_id, curr_start_time in start_time.iteritems():
+                time_condition = np.logical_and(original_data['create_date']>=curr_start_time,
+                                                original_data['create_date']<=end_time)
+                stock_condition = (original_data['code'] == stock_id)
+                curr_data = original_data[np.logical_and(time_condition, stock_condition)]
+                curr_coverage = analyst_coverage.simple_count(curr_data)
+                coverage.ix[time, stock_id] = curr_coverage
+
+
+            # # 储存此数据
+            # coverage.ix[time, :] = curr_coverage
             # coverage_disp.ix[time, :] = coverage_std
             # coverage_ep.ix[time, :] = coverage_mean
 
@@ -216,7 +274,7 @@ class analyst_coverage(single_factor_strategy):
         pass
 
     # 计算滚动期内的唯一分析师分析数据
-    def get_unique_coverage_number_parallel(self, *, rolling_days=90):
+    def get_unique_coverage_number_parallel(self, *, rolling_days=120):
         self.db.initialize_jydb()
         self.db.initialize_sq()
         self.db.initialize_gg()
@@ -224,13 +282,30 @@ class analyst_coverage(single_factor_strategy):
         self.db.get_labels()
 
         # 先将时间期内的所有数据都取出来
+        # sql_query = "select create_date, code, organ_id, author, Time_year, forecast_profit from " \
+        #             "((select id, code, organ_id, author, create_date from DER_REPORT_RESEARCH where " \
+        #             "create_date>='" + str(self.db.trading_days.iloc[0]) + "' and create_date<='" + \
+        #             str(self.db.trading_days.iloc[-1]) + "') a " \
+        #             "left join (select report_search_id as id, Time_year, forecast_profit from DER_REPORT_SUBTABLE) b " \
+        #             "on a.id=b.id) " \
+        #             "order by create_date, code "
+
+        # sql_query = "select create_date, code, organ_id, author, Time_year, forecast_profit from " \
+        #             "((select id, code, organ_id, type_id, author, create_date from CMB_REPORT_RESEARCH where " \
+        #             "create_date>='" + str(self.db.trading_days.iloc[0]) + "' and create_date<='" + \
+        #             str(self.db.trading_days.iloc[-1]) + "') a " \
+        #             "left join (select report_search_id as id, Time_year, forecast_profit from CMB_REPORT_SUBTABLE) b " \
+        #             "on a.id=b.id) where type_id != 28" \
+        #             "order by create_date, code "
+
         sql_query = "select create_date, code, organ_id, author, Time_year, forecast_profit from " \
-                    "((select id, code, organ_id, author, create_date from DER_REPORT_RESEARCH where " \
+                    "((select id, code, organ_id, type_id, author, create_date from CMB_REPORT_RESEARCH where " \
                     "create_date>='" + str(self.db.trading_days.iloc[0]) + "' and create_date<='" + \
                     str(self.db.trading_days.iloc[-1]) + "') a " \
-                    "left join (select report_search_id as id, Time_year, forecast_profit from DER_REPORT_SUBTABLE) b " \
-                    "on a.id=b.id) " \
+                    "left join (select report_search_id as id, Time_year, forecast_profit from CMB_REPORT_SUBTABLE) b " \
+                    "on a.id=b.id) where type_id in (23, 24, 26, 98) " \
                     "order by create_date, code "
+
         original_data = self.db.gg_engine.get_original_data(sql_query)
         # 先构造一个pivot table,主要目的是为了取时间
         date_mark = original_data.pivot_table(index='create_date', columns='code', values='forecast_profit')
@@ -242,11 +317,17 @@ class analyst_coverage(single_factor_strategy):
         # # ep为有效公司的下一年的预测ni/price, 有效公司为rolling days内至少有3个独立预测值的公司
         # coverage_disp = coverage * np.nan
         # coverage_ep = coverage * np.nan
+        # fra_pub_date = self.fra_pub_date * 1
+        # 暂时只算周末的值
+        self.generate_holding_days(holding_freq='w', loc=-1, start_date=self.db.start_date,
+                                   end_date=self.db.end_date)
+        holding_days = self.holding_days
 
         # 计算每期的coverage的函数
         def one_time_coverage(cursor):
+            end_time = holding_days.index[cursor]
             # 得到对应位置的时间索引,取为截至时间
-            end_time = date_mark.index[cursor]
+            # end_time = date_mark.index[cursor]
             start_time = end_time - pd.DateOffset(days=rolling_days - 1)
             # 满足最近90天条件的项
             condition = np.logical_and(original_data['create_date'] >= start_time,
@@ -263,6 +344,19 @@ class analyst_coverage(single_factor_strategy):
             # coverage_std = grouped.apply(analyst_coverage.ni_std)
             # coverage_mean = grouped.apply(analyst_coverage.ni_mean)
             # df = pd.DataFrame({'cov':curr_coverage, 'std':coverage_std, 'mean':coverage_mean})
+
+            # start_time = fra_pub_date.groupby('SecuCode')['InfoPublDate'].apply(
+            #     analyst_coverage.get_start_time, end_time=end_time)
+            # curr_coverage = pd.Series(np.nan, index=start_time.index)
+            # # 循环股票
+            # for stock_id, curr_start_time in start_time.iteritems():
+            #     time_condition = np.logical_and(original_data['create_date'] >= curr_start_time,
+            #                                     original_data['create_date'] <= end_time)
+            #     stock_condition = (original_data['code'] == stock_id)
+            #     curr_data = original_data[np.logical_and(time_condition, stock_condition)]
+            #     curr_coverage.ix[stock_id] = analyst_coverage.simple_count(curr_data)
+
+
             df = pd.DataFrame({'cov':curr_coverage})
             print(end_time)
             return df
@@ -271,13 +365,14 @@ class analyst_coverage(single_factor_strategy):
         if __name__ == '__main__':
             ncpus = 16
             p = mp.ProcessPool(ncpus)
-            data_size = np.arange(date_mark.shape[0])
+            data_size = np.arange(holding_days.shape[0])
             chunksize=int(len(data_size)/ncpus)
             results = p.map(one_time_coverage, data_size, chunksize=chunksize)
             temp_coverage = pd.concat([i['cov'] for i in results], axis=1).T
             # temp_disp = pd.concat([i['std'] for i in results], axis=1).T
             # temp_ep = pd.concat([i['mean'] for i in results], axis=1).T
-            coverage[:] = temp_coverage.values
+            temp_coverage = temp_coverage.set_index(self.holding_days).reindex(index=coverage.index, method='ffill')
+            coverage[:] = temp_coverage.reindex(columns=coverage.columns).values
             # coverage_disp[:] = temp_disp.values
             # coverage_ep[:] = temp_ep.values
         pass
@@ -305,7 +400,7 @@ class analyst_coverage(single_factor_strategy):
         # self.strategy_data.raw_data['coverage_ep'] = coverage_ep
 
         # data.write_data(self.strategy_data.raw_data, file_name=['unique_coverage', 'coverage_disp', 'coverage_ep'])
-        data.write_data(self.strategy_data.raw_data, file_name=['unique_coverage'])
+        data.write_data(self.strategy_data.raw_data, file_name=['unique_coverage real v2.0'])
 
     # 计算因子值
     def get_abn_coverage(self):
@@ -409,14 +504,13 @@ class analyst_coverage(single_factor_strategy):
         self.reg_stats = pd.Panel(np.nan, items=['coef', 't_stats', 'rsquare'],
                                   major_axis=self.holding_days, minor_axis=['int', 'lncap', 'turnover', 'momentum'])
 
-        from statsmodels.discrete.discrete_model import Poisson
         # 对调仓日进行循环回归
         for cursor, time in enumerate(self.holding_days):
             y = self.strategy_data.raw_data.ix['coverage', time, :]
             x = self.strategy_data.stock_price.ix[['lncap', 'turnover', 'momentum'], time, :]
             x = sm.add_constant(x)
             # 如果只有小于等于1个有效数据，则返回nan序列
-            if pd.concat([y, x], axis=1).dropna().shape[0] <= 3:
+            if pd.concat([y, x], axis=1).dropna().shape[0] <= 3 or not (y>0).any():
                 continue
             P = Poisson(y, x, missing='drop')
             results = P.fit(full_output=True)
@@ -425,7 +519,7 @@ class analyst_coverage(single_factor_strategy):
         abn_coverage = abn_coverage.reindex(self.strategy_data.stock_price.major_axis, method='ffill')
         self.strategy_data.factor = pd.Panel({'abn_coverage': abn_coverage}, major_axis=
         self.strategy_data.stock_price.major_axis, minor_axis=self.strategy_data.stock_price.minor_axis)
-        self.strategy_data.stock_price.ix['abn_coverage'] = strategy_data.get_exposure(abn_coverage,
+        self.strategy_data.factor.ix['abn_coverage'] = strategy_data.get_exposure(abn_coverage,
                                                                                        percentile=0, compress=False)
 
 
@@ -532,8 +626,10 @@ class analyst_coverage(single_factor_strategy):
         self.table1a.ix[1, 'r_square'] = r2_adj
 
         # 用csv储存结果
-        self.table1a.to_csv(str(os.path.abspath('.')) + '/' + self.strategy_data.stock_pool +
-                     '/' + 'Table1a.csv', na_rep='N/A', encoding='GB18030')
+        # self.table1a.to_csv(str(os.path.abspath('.')) + '/' + self.strategy_data.stock_pool +
+        #              '/' + 'Table1a.csv', na_rep='N/A', encoding='GB18030')
+        self.reg_stats.mean(1).to_csv(str(os.path.abspath('.')) + '/' + self.strategy_data.stock_pool +
+                      '/' + 'Table1a.csv', na_rep='N/A', encoding='GB18030')
 
         # # 对比用clustered se算出的t stats
         # stacked_y = self.strategy_data.raw_data.ix['ln_coverage'].stack(dropna=False)
@@ -993,7 +1089,7 @@ class analyst_coverage(single_factor_strategy):
         plt.hist(stacked_uc.values)
         plt.savefig(str(os.path.abspath('.')) + '/' + str(self.strategy_data.stock_pool) + '/kde.png', dpi=1200)
 
-        uc_old = data.read_data(['unique_coverage 90'], ['coverage_old'])
+        uc_old = data.read_data(['unique_coverage 120'], ['coverage_old'])
         uc_old = uc_old['coverage_old'].fillna(0).where(self.strategy_data.if_tradable.ix['if_inv'], np.nan)
         uc_old = uc_old.ix[self.holding_days, :]
         stacked_uc_old = uc_old.stack(dropna=True)
@@ -1075,7 +1171,163 @@ class analyst_coverage(single_factor_strategy):
 
         pass
 
+    # 根据每个公司财报发布的时间, 以及他们的分析师报告的时间, 来了解分析师报告的发布时间的情况
+    def time_about_analyst_report(self):
+        # 首先还是要取原始的分析师报告数据
+        # 先将时间期内的所有数据都取出来
+        # sql_query = "select create_date, code, organ_id, author, Time_year, forecast_profit from " \
+        #             "((select id, code, organ_id, author, create_date from DER_REPORT_RESEARCH where " \
+        #             "create_date>='" + str(self.db.trading_days.iloc[0]) + "' and create_date<='" + \
+        #             str(self.db.trading_days.iloc[-1]) + "') a " \
+        #             "left join (select report_search_id as id, Time_year, forecast_profit from DER_REPORT_SUBTABLE) b " \
+        #             "on a.id=b.id) " \
+        #             "order by create_date, code "
 
+        # sql_query = "select create_date, code, organ_id, author, Time_year, forecast_profit from " \
+        #             "((select id, code, organ_id, type_id, author, create_date from CMB_REPORT_RESEARCH where " \
+        #             "create_date>='" + str(self.db.trading_days.iloc[0]) + "' and create_date<='" + \
+        #             str(self.db.trading_days.iloc[-1]) + "') a " \
+        #             "left join (select report_search_id as id, Time_year, forecast_profit from CMB_REPORT_SUBTABLE) b " \
+        #             "on a.id=b.id) where type_id != 28" \
+        #             "order by create_date, code "
+
+        sql_query = "select create_date, code, organ_id, author, Time_year, forecast_profit from " \
+                    "((select id, code, organ_id, type_id, author, create_date from CMB_REPORT_RESEARCH where " \
+                    "create_date>='" + str(self.db.trading_days.iloc[0]) + "' and create_date<='" + \
+                    str(self.db.trading_days.iloc[-1]) + "') a " \
+                    "left join (select report_search_id as id, Time_year, forecast_profit from CMB_REPORT_SUBTABLE) b " \
+                    "on a.id=b.id) where type_id in (23, 24, 26, 98) " \
+                    "order by create_date, code "
+
+        original_data = self.db.gg_engine.get_original_data(sql_query)
+
+        # 去除重复的报告数据, 一份报告只能算一次
+        unique_data = original_data.drop_duplicates(subset=['create_date', 'code', 'organ_id', 'author'], keep='first')
+        month_distribution = unique_data['create_date'].map(lambda x: x.month)
+
+        # 画分析师报告的发布时间的月份分布, 可以看到大部分的分析师报告都是在财报发布的月份发布的
+        f1 = plt.figure()
+        ax1 = f1.add_subplot(1, 1, 1)
+        plt.hist(month_distribution.values, np.arange(1, 14))
+        plt.grid()
+        plt.savefig(str(os.path.abspath('.')) + '/' + str(self.strategy_data.stock_pool) + '/month_dist.png', dpi=1200)
+
+        # 尝试研究每份分析师报告是在公司财报发布后或发布前的什么时候发布的
+        # 储存数据
+        time_diff_dist = pd.Series(np.nan, index=np.arange(unique_data.shape[0]))
+
+        fra_pub_date = self.fra_pub_date * 1
+        # 计算每期的函数
+        def one_time_diff(cursor):
+            curr_pub_date = unique_data.iloc[cursor, 0]
+            curr_stock = unique_data.iloc[cursor, 1]
+            curr_stock_fra = fra_pub_date[fra_pub_date['SecuCode'] == curr_stock]
+            if curr_stock_fra.empty:
+                return np.nan
+            # 计算财报发布日期和分析师报告发布日期的差值
+            date_diff_series = curr_stock_fra['InfoPublDate'] - curr_pub_date
+            # 距离分析师发布最近的那一期财报
+            latest_fra_index = date_diff_series.abs().idxmin()
+            # 获取最近的一期财报和这期分析师报告的发布时间差距
+            recent_diff = date_diff_series[latest_fra_index].days
+            print(cursor)
+            return recent_diff
+
+        # # 循环唯一的报告
+        # for cursor, curr_report in unique_data.iterrows():
+        #     # 当前报告的发布时间和针对的股票
+        #     curr_pub_date = curr_report['create_date']
+        #     curr_stock = curr_report['code']
+        #     # 在财报发布日期中, 筛出当前股票的那一个
+        #     curr_stock_fra = self.fra_pub_date[self.fra_pub_date['SecuCode'] == curr_stock]
+        #     if curr_stock_fra.empty:
+        #         continue
+        #     # 计算财报发布日期和分析师报告发布日期的差值
+        #     date_diff_series = curr_stock_fra['InfoPublDate'] - curr_pub_date
+        #     # 距离分析师发布最近的那一期财报
+        #     latest_fra_index = date_diff_series.abs().idxmin()
+        #     # 获取最近的一期财报和这期分析师报告的发布时间差距
+        #     recent_diff = date_diff_series[latest_fra_index].days
+        #     # 储存数据
+        #     time_diff_dist.ix[cursor] = recent_diff
+        #     print(cursor)
+        #     pass
+
+        import pathos.multiprocessing as mp
+        if __name__ == '__main__':
+            ncpus = 16
+            p = mp._ProcessPool(ncpus)
+            data_size = np.arange(unique_data.shape[0])
+            # data_size = np.arange(5000)
+            chunksize = int(len(data_size)/ncpus)
+            results = p.map(one_time_diff, data_size, chunksize=chunksize)
+            time_diff_dist[:] = results
+            pass
+
+        time_diff_dist = time_diff_dist.dropna()
+
+        # 画直方图
+        f2 = plt.figure()
+        ax2 = f2.add_subplot(1, 1, 1)
+        plt.hist(time_diff_dist.values, [-300, -31, -15, -7, 0, 7, 15, 31, 300])
+        plt.grid()
+        plt.savefig(str(os.path.abspath('.')) + '/' + str(self.strategy_data.stock_pool) + '/time_diff_dist.png', dpi=1200)
+
+        # 画饼图
+        labels = ['>1m before', '1m before', '0.5m before', '1w before', '1w after', '0.5m after',
+                  '1m after', '>1m after']
+        time_diff_pie = pd.cut(time_diff_dist, [-300, -31, -15, -7, -0.01, 7, 15, 31, 300], labels=labels)
+        time_diff_pie_ratio = time_diff_dist.groupby(time_diff_pie).count()/time_diff_dist.shape[0]
+        f3 = plt.figure()
+        ax3 = f3.add_subplot(1, 1, 1)
+        plt.pie(time_diff_pie_ratio, labels=labels, autopct='%1.1f%%')
+        plt.savefig(str(os.path.abspath('.')) + '/' + str(self.strategy_data.stock_pool) + '/time_diff_pie.png',
+                    dpi=1200)
+
+
+        pass
+
+    # 构建因子
+    def construct_factor(self):
+        # self.get_abn_coverage_poisson()
+        self.strategy_data.factor = data.read_data(['unique_coverage'], ['unique_coverage'], shift=True)
+        self.strategy_data.factor.ix['unique_coverage'] = self.strategy_data.factor.ix['unique_coverage'].fillna(0)
+
+        # self.strategy_data.factor = data.read_data(['liquidity'], shift=True)
+
+        self.strategy_data.factor.ix['unique_coverage'] = np.log(self.strategy_data.factor.ix['unique_coverage'] + 1)
+
+    # # 做对barra base的泊松回归, 用这些因子进行提纯
+    # def get_pure_factor(self, bb_obj, *, do_active_bb_pure_factor=False, reg_weight=1,
+    #                     add_constant=False, use_factor_expo=True, expo_weight=1):
+    #     bb_obj.just_get_factor_expo()
+    #     lag_bb_expo = bb_obj.bb_data.factor_expo.shift(1).reindex(major_axis=bb_obj.bb_data.factor_expo.major_axis)
+    #     lag_bb_expo_nocf = lag_bb_expo.drop('country_factor', axis=0)
+    #
+    #     lag_bb_expo_nocf = lag_bb_expo_nocf.iloc[0:10, :, :]
+    #
+    #     abn_coverage = self.strategy_data.factor.iloc[0] * np.nan
+    #     t_stats = pd.DataFrame(np.nan, index=self.holding_days, columns=lag_bb_expo_nocf.items)
+    #     p_values = t_stats * np.nan
+    #     zero_y = t_stats * np.nan
+    #     # 进行poisson回归
+    #     for cursor, time in enumerate(self.holding_days):
+    #         y = self.strategy_data.factor.ix[0, time, :]
+    #         x = lag_bb_expo_nocf.ix[:, time, :]
+    #         # 如果只有小于等于1个有效数据，则返回nan序列
+    #         if pd.concat([y, x], axis=1).dropna().shape[0] <= 30 or not (y>0).any():
+    #             continue
+    #         P = Poisson(y, x, missing='drop')
+    #         results = P.fit()
+    #         abn_coverage.ix[time] = results.resid
+    #         t_stats.ix[time] = results.tvalues
+    #         p_values.ix[time] = results.pvalues
+    #         zero_y.ix[time] = (y==0).sum()/(y.dropna().shape[0])
+    #
+    #     abn_coverage_expo = strategy_data.get_cap_wgt_exposure(abn_coverage, self.strategy_data.stock_price.
+    #                                                            ix['FreeMarketValue'])
+    #     # abn_coverage_expo = strategy_data.get_exposure(abn_coverage)
+    #     self.strategy_data.factor.iloc[0] = abn_coverage_expo
 
 
     # 对原始数据的描述，即对论文的图表进行复制
@@ -1091,10 +1343,13 @@ class analyst_coverage(single_factor_strategy):
 
 if __name__ == '__main__':
     ac = analyst_coverage()
+    ac.get_fra_pub_date()
     # ac.data_description()
-    # ac.get_unique_coverage_number_parallel(rolling_days=120)
+    # ac.get_unique_coverage_number_parallel()
     # ac.get_unique_coverage_number()
-    ac.get_analyst_report_structure()
+    ac.time_about_analyst_report()
+    # ac.get_analyst_report_structure()
+
 
 
 
