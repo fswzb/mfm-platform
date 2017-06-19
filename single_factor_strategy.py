@@ -688,9 +688,9 @@ class single_factor_strategy(strategy):
         # 利用多元线性回归进行提纯
         if reg_weight == 1:
             pure_factor_expo = strategy_data.simple_orth_gs(factor_expo, base_expo_no_cf, weights=
-                np.sqrt(self.strategy_data.stock_price.ix['FreeMarketValue']), add_constant=add_constant)
+                np.sqrt(self.strategy_data.stock_price.ix['FreeMarketValue']), add_constant=add_constant)[0]
         elif reg_weight == 0:
-            pure_factor_expo = strategy_data.simple_orth_gs(factor_expo, base_expo_no_cf, add_constant=add_constant)
+            pure_factor_expo = strategy_data.simple_orth_gs(factor_expo, base_expo_no_cf, add_constant=add_constant)[0]
         # 将得到的纯化因子放入因子值中储存
         self.strategy_data.factor.iloc[0] = pure_factor_expo
 
@@ -891,7 +891,7 @@ class single_factor_strategy(strategy):
             bkt_obj.get_performance_attribution(outside_bb=bb_obj, benchmark_weight=pa_benchmark_weight,
                                                 discard_factor=discard_factor, show_warning=False,
                                                 foldername=stock_pool, pdfs=self.pdfs, is_real_world=False,
-                                                real_world_type=2)
+                                                real_world_type=2, enable_reading_pa_return=False)
 
         ###################################################################################################
         # 第六部分为, 1. 根据回归算单因子的纯因子组合收益率

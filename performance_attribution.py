@@ -72,9 +72,10 @@ class performance_attribution(object):
     # 进行业绩归因
     # 用discard_factor可以定制用来归因的因子，将不需要的因子的名字或序号以list写入即可
     # 注意，只能用来删除风格因子，不能用来删除行业因子或country factor
-    def get_pa_return(self, *, discard_factor=[]):
+    def get_pa_return(self, *, discard_factor=[], enable_reading_pa_return=True):
         # 如果有储存的因子收益, 且没有被丢弃的因子, 则读取储存在本地的因子
-        if os.path.isfile('bb_factor_return_'+self.bb.bb_data.stock_pool+'.csv') and len(discard_factor) == 0:
+        if os.path.isfile('bb_factor_return_'+self.bb.bb_data.stock_pool+'.csv') and \
+                        len(discard_factor) == 0 and enable_reading_pa_return:
             bb_factor_return = data.read_data(['bb_factor_return_'+self.bb.bb_data.stock_pool], ['pa_returns'])
             self.pa_returns = bb_factor_return['pa_returns']
             print('Barra base factor returns successfully read from local files! \n')
@@ -92,14 +93,20 @@ class performance_attribution(object):
             self.pa_returns = self.bb.bb_factor_return
 
             # 将回归得到的因子收益储存在本地, 每次更新了新的数据都要重新回归后储存一次
-            # self.pa_returns.to_csv('bb_factor_return_'+self.bb.bb_data.stock_pool+'.csv',
-            #                        index_label='datetime', na_rep='NaN', encoding='GB18030')
+            self.pa_returns.to_csv('bb_factor_return_'+self.bb.bb_data.stock_pool+'.csv',
+                                   index_label='datetime', na_rep='NaN', encoding='GB18030')
 
         # 将pa_returns的时间轴改为业绩归因的时间轴（而不是bb的时间轴）
         self.pa_returns = self.pa_returns.reindex(self.pa_position.holding_matrix.index)
 
     # 将归因的结果进行整理
     def analyze_pa_outcome(self):
+        # 首先将传入的要归因的持仓矩阵的代码重索引为bb factor的股票代码
+        # 注意这里之后需要加一个像回测里那样的检查持仓矩阵里的股票代码是否都在bb factor的股票代码中
+        # 因为如果不这样可能会遗失掉某些股票
+        self.pa_position.holding_matrix = self.pa_position.holding_matrix.reindex(
+            columns=self.bb.bb_data.factor_expo.minor_axis, fill_value=0.0)
+
         # 首先根据持仓比例计算组合在各个因子上的暴露
         # 如果采用相对基准的超额归因，则可能出现基准的成分股中有不可交易的股票，从而其没有因子暴露数据
         # 没有因子暴露数据，却在超额持仓中，会导致超额组合的暴露不正确。需要对这些股票的因子暴露进行修正
@@ -188,14 +195,17 @@ class performance_attribution(object):
         plt.plot(self.style_factor_returns.cumsum()*100, label='style')
         plt.plot(self.industry_factor_returns.cumsum()*100, label='industry')
         plt.plot(self.country_factor_return.cumsum()*100, label='country')
-        plt.plot(self.residual_returns.cumsum()*100, label='residual')
+        # plt.plot(self.residual_returns.cumsum()*100, label='residual')
         ax1.set_xlabel('Time')
         ax1.set_ylabel('Cumulative Log Return (%)')
         ax1.set_title('The Cumulative Log Return of Factor Groups')
-        ax1.legend(loc='best')
-        plt.savefig(str(os.path.abspath('.')) + '/' + foldername + '/PA_RetSource.png', dpi=1200)
+        ax1.legend(loc='best', bbox_to_anchor=(1, 1))
+        plt.xticks(rotation=30)
+        plt.grid()
+        plt.savefig(str(os.path.abspath('.')) + '/' + foldername + '/PA_RetSource.png', dpi=1200,
+                    bbox_inches='tight')
         if type(pdfs) != str:
-            plt.savefig(pdfs, format='pdf')
+            plt.savefig(pdfs, format='pdf', bbox_inches='tight')
 
         # 第二张图分解组合的累计风格收益
         f2 = plt.figure()
@@ -204,10 +214,13 @@ class performance_attribution(object):
         ax2.set_xlabel('Time')
         ax2.set_ylabel('Cumulative Log Return (%)')
         ax2.set_title('The Cumulative Log Return of Style Factors')
-        ax2.legend(self.port_pa_returns.columns[0:10], loc='best')
-        plt.savefig(str(os.path.abspath('.')) + '/' + foldername + '/PA_CumRetStyle.png', dpi=1200)
+        ax2.legend(self.port_pa_returns.columns[0:10], loc='best', bbox_to_anchor=(1, 1))
+        plt.xticks(rotation=30)
+        plt.grid()
+        plt.savefig(str(os.path.abspath('.')) + '/' + foldername + '/PA_CumRetStyle.png', dpi=1200,
+                    bbox_inches='tight')
         if type(pdfs) != str:
-            plt.savefig(pdfs, format='pdf')
+            plt.savefig(pdfs, format='pdf', bbox_inches='tight')
 
         # 第三张图分解组合的累计行业收益
         # 行业图示只给出最大和最小的5个行业
@@ -230,10 +243,13 @@ class performance_attribution(object):
         ax3.set_xlabel('Time')
         ax3.set_ylabel('Cumulative Log Return (%)')
         ax3.set_title('The Cumulative Log Return of Industrial Factors')
-        ax3.legend(loc='best', prop=chifont)
-        plt.savefig(str(os.path.abspath('.'))+'/'+foldername+'/PA_CumRetIndus.png', dpi=1200)
+        ax3.legend(loc='best', prop=chifont, bbox_to_anchor=(1, 1))
+        plt.xticks(rotation=30)
+        plt.grid()
+        plt.savefig(str(os.path.abspath('.'))+'/'+foldername+'/PA_CumRetIndus.png', dpi=1200,
+                    bbox_inches='tight')
         if type(pdfs) != str:
-            plt.savefig(pdfs, format='pdf')
+            plt.savefig(pdfs, format='pdf', bbox_inches='tight')
 
         # 第四张图画组合的累计风格暴露
         f4 = plt.figure()
@@ -242,10 +258,13 @@ class performance_attribution(object):
         ax4.set_xlabel('Time')
         ax4.set_ylabel('Cumulative Factor Exposures')
         ax4.set_title('The Cumulative Style Factor Exposures of the Portfolio')
-        ax4.legend(self.port_expo.columns[0:10], loc='best')
-        plt.savefig(str(os.path.abspath('.'))+'/'+foldername+'/PA_CumExpoStyle.png', dpi=1200)
+        ax4.legend(self.port_expo.columns[0:10], loc='best', bbox_to_anchor=(1, 1))
+        plt.xticks(rotation=30)
+        plt.grid()
+        plt.savefig(str(os.path.abspath('.'))+'/'+foldername+'/PA_CumExpoStyle.png', dpi=1200,
+                    bbox_inches='tight')
         if type(pdfs) != str:
-            plt.savefig(pdfs, format='pdf')
+            plt.savefig(pdfs, format='pdf', bbox_inches='tight')
 
         # 第五张图画组合的累计行业暴露
         f5 = plt.figure()
@@ -254,16 +273,19 @@ class performance_attribution(object):
         indus_rank = self.port_expo.ix[:, 10:38].cumsum(0).ix[-1].rank(ascending=False)
         for i, j in enumerate(self.port_expo.ix[:, 10:38].columns):
             if indus_rank[j] in qualified_rank:
-                plt.plot((self.port_expo.ix[:, j].cumsum(0) * 100), label=j+str(indus_rank[j]))
+                plt.plot((self.port_expo.ix[:, j].cumsum(0)), label=j+str(indus_rank[j]))
             else:
-                plt.plot((self.port_expo.ix[:, j].cumsum(0) * 100), label='_nolegend_')
+                plt.plot((self.port_expo.ix[:, j].cumsum(0)), label='_nolegend_')
         ax5.set_xlabel('Time')
         ax5.set_ylabel('Cumulative Factor Exposures')
         ax5.set_title('The Cumulative Industrial Factor Exposures of the Portfolio')
-        ax5.legend(loc='best', prop=chifont)
-        plt.savefig(str(os.path.abspath('.'))+'/'+foldername+'/PA_CumExpoIndus.png', dpi=1200)
+        ax5.legend(loc='best', prop=chifont, bbox_to_anchor=(1, 1))
+        plt.xticks(rotation=30)
+        plt.grid()
+        plt.savefig(str(os.path.abspath('.'))+'/'+foldername+'/PA_CumExpoIndus.png', dpi=1200,
+                    bbox_inches='tight')
         if type(pdfs) != str:
-            plt.savefig(pdfs, format='pdf')
+            plt.savefig(pdfs, format='pdf', bbox_inches='tight')
 
         # 第六张图画组合的每日风格暴露
         f6 = plt.figure()
@@ -272,10 +294,13 @@ class performance_attribution(object):
         ax6.set_xlabel('Time')
         ax6.set_ylabel('Factor Exposures')
         ax6.set_title('The Style Factor Exposures of the Portfolio')
-        ax6.legend(self.port_expo.columns[0:10], loc='best')
-        plt.savefig(str(os.path.abspath('.'))+'/'+foldername+'/PA_ExpoStyle.png', dpi=1200)
+        ax6.legend(self.port_expo.columns[0:10], loc='best', bbox_to_anchor=(1, 1))
+        plt.xticks(rotation=30)
+        plt.grid()
+        plt.savefig(str(os.path.abspath('.'))+'/'+foldername+'/PA_ExpoStyle.png', dpi=1200,
+                    bbox_inches='tight')
         if type(pdfs) != str:
-            plt.savefig(pdfs, format='pdf')
+            plt.savefig(pdfs, format='pdf', bbox_inches='tight')
 
         # 第七张图画组合的每日行业暴露
         f7 = plt.figure()
@@ -290,10 +315,13 @@ class performance_attribution(object):
         ax7.set_xlabel('Time')
         ax7.set_ylabel('Factor Exposures')
         ax7.set_title('The Industrial Factor Exposures of the Portfolio')
-        ax7.legend(loc='best', prop=chifont)
-        plt.savefig(str(os.path.abspath('.'))+'/'+foldername+'/PA_ExpoIndus.png', dpi=1200)
+        ax7.legend(loc='best', prop=chifont, bbox_to_anchor=(1, 1))
+        plt.xticks(rotation=30)
+        plt.grid()
+        plt.savefig(str(os.path.abspath('.'))+'/'+foldername+'/PA_ExpoIndus.png', dpi=1200,
+                    bbox_inches='tight')
         if type(pdfs) != str:
-            plt.savefig(pdfs, format='pdf')
+            plt.savefig(pdfs, format='pdf', bbox_inches='tight')
 
         # 第八张图画用于归因的bb的风格因子的纯因子收益率，即回归得到的因子收益率，仅供参考
         f8 = plt.figure()
@@ -302,16 +330,19 @@ class performance_attribution(object):
         ax8.set_xlabel('Time')
         ax8.set_ylabel('Cumulative Log Return (%)')
         ax8.set_title('The Cumulative Log Return of Pure Style Factors Through Regression')
-        ax8.legend(self.pa_returns.columns[0:10], loc='best')
-        plt.savefig(str(os.path.abspath('.')) + '/' + foldername + '/PA_PureStyleFactorRet.png', dpi=1200)
+        ax8.legend(self.pa_returns.columns[0:10], loc='best', bbox_to_anchor=(1, 1))
+        plt.xticks(rotation=30)
+        plt.grid()
+        plt.savefig(str(os.path.abspath('.')) + '/' + foldername + '/PA_PureStyleFactorRet.png', dpi=1200,
+                    bbox_inches='tight')
         if type(pdfs) != str:
-            plt.savefig(pdfs, format='pdf')
+            plt.savefig(pdfs, format='pdf', bbox_inches='tight')
 
     # 进行业绩归因
     def execute_performance_attribution(self, *, outside_bb='Empty', discard_factor=[], show_warning=True, 
-                                        foldername=''):
+                                        foldername='', enable_reading_pa_return=True):
         self.construnct_bb(outside_bb=outside_bb)
-        self.get_pa_return(discard_factor=discard_factor)
+        self.get_pa_return(discard_factor=discard_factor, enable_reading_pa_return=enable_reading_pa_return)
         self.analyze_pa_outcome()
         self.handle_discarded_stocks(show_warning=show_warning, foldername=foldername)
 

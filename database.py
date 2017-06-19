@@ -523,7 +523,7 @@ class database(object):
         benchmark_data_type = ['ClosePrice', 'OpenPrice', 'Weight', 'ClosePrice_adj']
         benchmark_price_name_list = [a+'_'+b for a in benchmark_data_type for b in benchmark_index_name]
         # 注意上证综指没有closeprice adj, 即全收益数据
-        benchmark_price_name_list = benchmark_price_name_list.remove('ClosePrice_adj_szzz')
+        benchmark_price_name_list.remove('ClosePrice_adj_szzz')
 
         old_stock_price = data.read_data(stock_price_name_list, stock_price_name_list)
         old_raw_data = data.read_data(raw_data_name_list, raw_data_name_list)
@@ -581,15 +581,15 @@ if __name__ == '__main__':
     start_time = time.time()
     db = database(start_date='2007-01-01', end_date='2017-04-27')
     # db.get_data_from_db()
-    # db.update_data_from_db(end_date='2017-04-27')
-    db.initialize_jydb()
-    db.initialize_sq()
-    db.initialize_gg()
-    db.get_trading_days()
-    db.get_labels()
-    db.get_ClosePrice_adj()
-    db.get_index_price()
-    data.write_data(db.data.benchmark_price)
+    db.update_data_from_db(end_date='2017-06-14')
+    # db.initialize_jydb()
+    # db.initialize_sq()
+    # db.initialize_gg()
+    # db.get_trading_days()
+    # db.get_labels()
+    # db.get_ClosePrice_adj()
+    # db.get_index_price()
+    # data.write_data(db.data.benchmark_price)
     print("time: {0} seconds\n".format(time.time()-start_time))
 
 

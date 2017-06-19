@@ -238,7 +238,7 @@ class barra_base(object):
                 return temp
             import pathos.multiprocessing as mp
             if __name__ == '__main__':
-                ncpus = 4
+                ncpus = 16
                 p = mp.ProcessPool(ncpus)
                 # 从252期开始
                 data_size = np.arange(251, self.bb_data.stock_price.ix['daily_excess_return'].shape[0])
@@ -378,7 +378,7 @@ class barra_base(object):
                           'beta_expo':strategy_data.get_cap_wgt_exposure(self.bb_data.factor.ix['beta'],
                                                                          self.bb_data.stock_price.ix['FreeMarketValue'])})
             # 正交化
-            new_rv = strategy_data.simple_orth_gs(y, x, weights = np.sqrt(self.bb_data.stock_price.ix['FreeMarketValue']))
+            new_rv = strategy_data.simple_orth_gs(y, x, weights = np.sqrt(self.bb_data.stock_price.ix['FreeMarketValue']))[0]
             # 之后会再次的计算暴露，注意再次计算暴露后，new_rv依然保有对x的正交性
             self.bb_data.factor['rv'] = new_rv
                            
@@ -395,7 +395,7 @@ class barra_base(object):
             x = pd.Panel({'lncap_expo': strategy_data.get_cap_wgt_exposure(self.bb_data.factor.ix['lncap'],
                                                                            self.bb_data.stock_price.ix['FreeMarketValue'])})
             # 对市值因子做正交化
-            new_nls = strategy_data.simple_orth_gs(y, x, weights = np.sqrt(self.bb_data.stock_price.ix['FreeMarketValue']))
+            new_nls = strategy_data.simple_orth_gs(y, x, weights = np.sqrt(self.bb_data.stock_price.ix['FreeMarketValue']))[0]
             self.bb_data.factor['nls'] = new_nls
 
     # 计算pb
@@ -490,7 +490,7 @@ class barra_base(object):
             x = pd.Panel({'lncap_expo': strategy_data.get_cap_wgt_exposure(self.bb_data.factor.ix['lncap'],
                                                                            self.bb_data.stock_price.ix['FreeMarketValue'])})
             # 正交化
-            new_liq = strategy_data.simple_orth_gs(y, x, weights = np.sqrt(self.bb_data.stock_price.ix['FreeMarketValue']))
+            new_liq = strategy_data.simple_orth_gs(y, x, weights = np.sqrt(self.bb_data.stock_price.ix['FreeMarketValue']))[0]
             self.bb_data.factor['liquidity'] = new_liq
 
     # 计算earnings yield中的epfwd

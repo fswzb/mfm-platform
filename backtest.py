@@ -42,7 +42,8 @@ class backtest(object):
         # 只支持正杠杆，即买空卖空的持仓比例之和必须大于0
         greater_than_zero_condition = self.bkt_position.holding_matrix.sum(1) > infinitesimal
         # 确保这些持仓比例和为0的股票并非全是0，以免将全是0的持仓判断为非法持仓
-        all_zeros_condition = self.bkt_position.holding_matrix.ix[~greater_than_zero_condition].prod(1) == 0.0
+        # all_zeros_condition = self.bkt_position.holding_matrix.ix[~greater_than_zero_condition].prod(1) == 0.0
+        all_zeros_condition = (self.bkt_position.holding_matrix == 0.0).all(1)
         assert np.logical_or(greater_than_zero_condition, all_zeros_condition).all(), \
             'Sum of the holding matrix are no greater than 0 for at least 1 timestamp, this is not supported by this ' \
             'backtest system. Note that the timestamp whose holdings are all 0 has been excluded from this error.\n'
@@ -418,7 +419,7 @@ class backtest(object):
     # 如果不使用模拟的真实数据进行归因，则使用日收益数据直接计算组合收益率，这种情况下，如进行超额归因，则是对基准进行每日再平衡
     def get_performance_attribution(self, *, benchmark_weight='default', outside_bb='Empty', discard_factor=[],
                                     show_warning=True, is_real_world=False, real_world_type=0,
-                                    foldername='', pdfs='default'):
+                                    foldername='', pdfs='default', enable_reading_pa_return=True):
         if is_real_world:
             if real_world_type == 0:
                 self.bkt_pa = performance_attribution(self.real_pct_position, self.bkt_performance.log_return,
@@ -444,7 +445,8 @@ class backtest(object):
             self.bkt_pa = performance_attribution(self.real_pct_position, ideal_return,
                                                   benchmark_weight=benchmark_weight)
         self.bkt_pa.execute_performance_attribution(outside_bb=outside_bb, discard_factor=discard_factor,
-                                                    show_warning=show_warning, foldername=foldername)
+                                                    show_warning=show_warning, foldername=foldername,
+                                                    enable_reading_pa_return=enable_reading_pa_return)
         self.bkt_pa.plot_performance_attribution(foldername=foldername, pdfs=pdfs)
 
     # 重置回测每次执行回测要改变的数据，若想不创建新回测对象而改变回测参数，则需重置这些数据后才能再次执行回测
